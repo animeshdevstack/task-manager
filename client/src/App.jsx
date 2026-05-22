@@ -5,6 +5,7 @@ import Login from '@/pages/Login'
 import ResetPassword from '@/pages/ResetPassword'
 import Signup from '@/pages/Signup'
 import TaskManager from '@/pages/TaskManager'
+import HabitTracker from '@/pages/HabitTracker'
 
 export default function App() {
   return (
@@ -20,6 +21,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <TaskManager />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/habits"
+          element={
+            <ProtectedRoute>
+              <HabitTracker />
             </ProtectedRoute>
           }
         />

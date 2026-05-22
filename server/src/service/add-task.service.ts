@@ -1,4 +1,27 @@
+import mongoose from "mongoose";
 import { AddTask } from "../model/add-task.model";
+import {
+  createReviewTaskFromAddTask,
+  syncReviewTaskFromAddTask,
+  deleteReviewTaskByTaskId,
+  AddTaskForReview,
+} from "./review-task.service";
+
+const toAddTaskForReview = (doc: {
+  _id: import("mongoose").Types.ObjectId;
+  userId: import("mongoose").Types.ObjectId;
+  currentMonthAndYear: string;
+  DailyTasks: { _id: import("mongoose").Types.ObjectId; taskName: string }[];
+  WeeklyTasks: { _id: import("mongoose").Types.ObjectId; taskName: string }[];
+  MonthlyTasks: { _id: import("mongoose").Types.ObjectId; taskName: string }[];
+}): AddTaskForReview => ({
+  _id: doc._id,
+  userId: doc.userId,
+  currentMonthAndYear: doc.currentMonthAndYear,
+  DailyTasks: doc.DailyTasks.map((t) => ({ _id: t._id, taskName: t.taskName })),
+  WeeklyTasks: doc.WeeklyTasks.map((t) => ({ _id: t._id, taskName: t.taskName })),
+  MonthlyTasks: doc.MonthlyTasks.map((t) => ({ _id: t._id, taskName: t.taskName })),
+});
 
 const formatCurrentMonthAndYear = (d: Date): string => {
   const y = d.getFullYear();
@@ -6,18 +29,51 @@ const formatCurrentMonthAndYear = (d: Date): string => {
   return `${y}-${m}`;
 };
 
+const runWithTransaction = async <T>(fn: (session: mongoose.ClientSession) => Promise<T>): Promise<T> => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const result = await fn(session);
+    await session.commitTransaction();
+    return result;
+  } catch (error) {
+    await session.abortTransaction();
+    if (error instanceof Error) {
+      throw new Error(error.message);
+    }
+    throw new Error("Internal server error");
+  } finally {
+    session.endSession();
+  }
+};
+
 const CreateTaskService = async (data: any, userId: string): Promise<any> => {
   try {
     const { DailyTasks, WeeklyTasks, MonthlyTasks } = data;
-    const doc = await AddTask.create({
-      userId,
-      createdBy: userId,
-      currentMonthAndYear: formatCurrentMonthAndYear(new Date()),
-      DailyTasks,
-      WeeklyTasks,
-      MonthlyTasks,
+
+    return await runWithTransaction(async (session) => {
+      const created = await AddTask.create(
+        [
+          {
+            userId,
+            createdBy: userId,
+            currentMonthAndYear: formatCurrentMonthAndYear(new Date()),
+            DailyTasks,
+            WeeklyTasks,
+            MonthlyTasks,
+          },
+        ],
+        { session },
+      );
+
+      const doc = created[0];
+      if (!doc) {
+        throw new Error("Failed to create task");
+      }
+
+      await createReviewTaskFromAddTask(toAddTaskForReview(doc), session);
+      return doc;
     });
-    return doc;
   } catch (error) {
     if (error instanceof Error) {
       throw new Error(error.message);
@@ -83,15 +139,20 @@ const GetTaskByIdService = async (id: string, userId: string): Promise<any> => {
 const UpdateTaskService = async (id: string, data: any, userId: string): Promise<any> => {
   try {
     const { DailyTasks, WeeklyTasks, MonthlyTasks } = data;
-    const updated = await AddTask.findOneAndUpdate(
-      { _id: id, userId },
-      { DailyTasks, WeeklyTasks, MonthlyTasks },
-      { new: true, runValidators: true },
-    );
-    if (!updated) {
-      throw new Error("Task not found");
-    }
-    return updated;
+
+    return await runWithTransaction(async (session) => {
+      const updated = await AddTask.findOneAndUpdate(
+        { _id: id, userId },
+        { DailyTasks, WeeklyTasks, MonthlyTasks },
+        { new: true, runValidators: true, session },
+      );
+      if (!updated) {
+        throw new Error("Task not found");
+      }
+
+      await syncReviewTaskFromAddTask(toAddTaskForReview(updated), session);
+      return updated;
+    });
   } catch (error) {
     if (error instanceof Error) {
       throw new Error(error.message);
@@ -102,11 +163,15 @@ const UpdateTaskService = async (id: string, data: any, userId: string): Promise
 
 const DeleteTaskService = async (id: string, userId: string): Promise<any> => {
   try {
-    const deleted = await AddTask.findOneAndDelete({ _id: id, userId });
-    if (!deleted) {
-      throw new Error("Task not found");
-    }
-    return deleted;
+    return await runWithTransaction(async (session) => {
+      const deleted = await AddTask.findOneAndDelete({ _id: id, userId }).session(session);
+      if (!deleted) {
+        throw new Error("Task not found");
+      }
+
+      await deleteReviewTaskByTaskId(id, userId, session);
+      return deleted;
+    });
   } catch (error) {
     if (error instanceof Error) {
       throw new Error(error.message);
