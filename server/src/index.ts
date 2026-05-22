@@ -9,29 +9,29 @@ const app = express();
 
 const PORT = configuration.PORT;
 
-const allowedOrigins = new Set([
-  configuration.FRONTEND_URL,
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-  'https://task-manager-client-nu-swart.vercel.app'
-]);
+// const allowedOrigins = new Set([
+//   configuration.FRONTEND_URL,
+//   "http://localhost:5173",
+//   "http://127.0.0.1:5173",
+//   'https://task-manager-client-nu-swart.vercel.app'
+// ]);
 
-console.log(configuration.FRONTEND_URL);
+// app.use(
+//   cors({
+//     origin: (origin, callback) => {
+//       if (!origin || allowedOrigins.has(origin)) {
+//         callback(null, true);
+//         return;
+//       }
+//       callback(new Error(`CORS: origin not allowed: ${origin}`));
+//     },
+//     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+//     allowedHeaders: ["Content-Type", "Authorization"],
+//     credentials: true,
+//   }),
+// );
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.has(origin)) {
-        callback(null, true);
-        return;
-      }
-      callback(new Error(`CORS: origin not allowed: ${origin}`));
-    },
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  }),
-);
+app.use(cors({ origin: '*' }));
 
 app.use(express.json());
 
