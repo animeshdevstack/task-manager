@@ -29,15 +29,27 @@ const formatCurrentMonthAndYear = (d: Date): string => {
   return `${y}-${m}`;
 };
 
-const runWithTransaction = async <T>(fn: (session: mongoose.ClientSession) => Promise<T>): Promise<T> => {
+const isTransactionUnsupported = (error: unknown): boolean => {
+  const msg = error instanceof Error ? error.message : String(error);
+  return /Transaction numbers|replica set|not support.*transaction/i.test(msg);
+};
+
+const runWithTransaction = async <T>(
+  fn: (session?: mongoose.ClientSession) => Promise<T>,
+): Promise<T> => {
   const session = await mongoose.startSession();
-  session.startTransaction();
   try {
+    session.startTransaction();
     const result = await fn(session);
     await session.commitTransaction();
     return result;
   } catch (error) {
-    await session.abortTransaction();
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+    if (isTransactionUnsupported(error)) {
+      return fn(undefined);
+    }
     if (error instanceof Error) {
       throw new Error(error.message);
     }
@@ -63,7 +75,7 @@ const CreateTaskService = async (data: any, userId: string): Promise<any> => {
             MonthlyTasks,
           },
         ],
-        { session },
+        session ? { session } : {},
       );
 
       const doc = created[0];
@@ -144,7 +156,7 @@ const UpdateTaskService = async (id: string, data: any, userId: string): Promise
       const updated = await AddTask.findOneAndUpdate(
         { _id: id, userId },
         { DailyTasks, WeeklyTasks, MonthlyTasks },
-        { new: true, runValidators: true, session },
+        { new: true, runValidators: true, ...(session ? { session } : {}) },
       );
       if (!updated) {
         throw new Error("Task not found");
@@ -164,7 +176,9 @@ const UpdateTaskService = async (id: string, data: any, userId: string): Promise
 const DeleteTaskService = async (id: string, userId: string): Promise<any> => {
   try {
     return await runWithTransaction(async (session) => {
-      const deleted = await AddTask.findOneAndDelete({ _id: id, userId }).session(session);
+      const deleteQuery = AddTask.findOneAndDelete({ _id: id, userId });
+      if (session) deleteQuery.session(session);
+      const deleted = await deleteQuery;
       if (!deleted) {
         throw new Error("Task not found");
       }

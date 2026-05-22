@@ -4,11 +4,13 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Home,
   ListChecks,
   LogOut,
   Pencil,
-  Plus,
+  CirclePlus,
   Sparkles,
   Trash2,
 } from 'lucide-react'
@@ -27,6 +29,8 @@ import { tasksRequest } from '@/lib/tasks-api'
 import { cn } from '@/lib/utils'
 
 const TASKS_PER_PAGE = 5
+/** Five compact rows (2rem each + gaps + list padding). */
+const TASK_LIST_H = 'h-[10.75rem]'
 
 function formatYearMonth(d) {
   const y = d.getFullYear()
@@ -38,22 +42,108 @@ function formatMonthTitle(d) {
   return d.toLocaleString(undefined, { month: 'long', year: 'numeric' })
 }
 
-function toTaskPayload(names) {
-  return names
-    .map((s) => s.trim())
+function toTaskPayload(items) {
+  if (!Array.isArray(items)) return []
+  return items
+    .map((item) => {
+      const taskName = (
+        typeof item === 'string' ? item : (item?.taskName ?? '')
+      ).trim()
+      if (!taskName) return null
+      const id =
+        typeof item === 'object' && item?.id ? String(item.id) : undefined
+      return id ? { _id: id, taskName } : { taskName }
+    })
     .filter(Boolean)
-    .map((taskName) => ({ taskName }))
 }
 
 function fromDocTasks(arr) {
   if (!Array.isArray(arr)) return []
   return arr
-    .map((x) => (typeof x?.taskName === 'string' ? x.taskName : ''))
+    .map((x) => {
+      const taskName = typeof x?.taskName === 'string' ? x.taskName.trim() : ''
+      if (!taskName) return null
+      const id = x?._id != null ? String(x._id) : undefined
+      return { id, taskName }
+    })
     .filter(Boolean)
 }
 
 function totalPages(count) {
   return Math.max(1, Math.ceil(count / TASKS_PER_PAGE))
+}
+
+function TaskListPagination({ page, pages, disabled, onPageChange, accentClass }) {
+  const atFirst = page <= 1
+  const atLast = page >= pages
+  const btnClass = 'h-7 w-7 shrink-0 p-0'
+
+  return (
+    <div
+      className={cn(
+        'flex h-9 shrink-0 items-center justify-between gap-1 rounded-lg border px-1.5 py-1 shadow-md',
+        accentClass ??
+          'border-slate-200/80 bg-white shadow-slate-200/50 dark:border-slate-600 dark:bg-slate-900',
+      )}
+      aria-label="Task list pagination"
+    >
+      <div className="flex items-center gap-0.5">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={btnClass}
+          disabled={disabled || atFirst}
+          onClick={() => onPageChange(1)}
+          aria-label="First page"
+          title="First page"
+        >
+          <ChevronsLeft className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={btnClass}
+          disabled={disabled || atFirst}
+          onClick={() => onPageChange(page - 1)}
+          aria-label="Previous page"
+          title="Previous page"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+      <span className="min-w-[4.5rem] text-center text-[10px] font-semibold tabular-nums text-slate-700 dark:text-slate-200">
+        {page} / {pages}
+      </span>
+      <div className="flex items-center gap-0.5">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={btnClass}
+          disabled={disabled || atLast}
+          onClick={() => onPageChange(page + 1)}
+          aria-label="Next page"
+          title="Next page"
+        >
+          <ChevronRight className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={btnClass}
+          disabled={disabled || atLast}
+          onClick={() => onPageChange(pages)}
+          aria-label="Last page"
+          title="Last page"
+        >
+          <ChevronsRight className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 export default function TaskManager() {
@@ -249,7 +339,7 @@ export default function TaskManager() {
     const name = draft.trim()
     if (!name) return
 
-    const next = [...tasks, name]
+    const next = [...tasks, { taskName: name }]
     setTasks(next)
     setDraft('')
     setListPage((p) => ({
@@ -303,11 +393,13 @@ export default function TaskManager() {
       return
     }
     const { tasks, setTasks } = getSectionState(section)
-    if (tasks[index] === trimmed) {
+    if (tasks[index]?.taskName === trimmed) {
       setEditing(null)
       return
     }
-    const next = tasks.map((t, i) => (i === index ? trimmed : t))
+    const next = tasks.map((t, i) =>
+      i === index ? { ...t, taskName: trimmed } : t,
+    )
     setTasks(next)
     setEditing(null)
 
@@ -337,49 +429,63 @@ export default function TaskManager() {
   const sections = [
     {
       key: 'daily',
-      title: 'Daily tasks',
-      description: 'Small wins every day',
+      title: 'Daily',
+      description: 'Every day',
       accent: 'from-rose-500 to-orange-500',
-      ring: 'ring-rose-400/40',
-      bg: 'bg-rose-50/80 dark:bg-rose-950/30',
-      listBorder: 'border-rose-200/80',
+      ring: 'ring-rose-300/60',
+      bg: 'bg-rose-50/90 dark:bg-rose-950/40',
+      listBorder: 'border-rose-200/70',
+      btn: 'bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-400 hover:to-orange-400',
+      inputRing: 'focus-visible:ring-rose-400',
+      paginationBar:
+        'border-rose-300/80 bg-rose-50 ring-1 ring-rose-200/60 dark:border-rose-800 dark:bg-rose-950/90',
     },
     {
       key: 'weekly',
-      title: 'Weekly tasks',
-      description: 'Milestones for the week',
+      title: 'Weekly',
+      description: 'Each week',
       accent: 'from-emerald-500 to-teal-500',
-      ring: 'ring-emerald-400/40',
-      bg: 'bg-emerald-50/80 dark:bg-emerald-950/30',
-      listBorder: 'border-emerald-200/80',
+      ring: 'ring-emerald-300/60',
+      bg: 'bg-emerald-50/90 dark:bg-emerald-950/40',
+      listBorder: 'border-emerald-200/70',
+      btn: 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400',
+      inputRing: 'focus-visible:ring-emerald-400',
+      paginationBar:
+        'border-emerald-300/80 bg-emerald-50 ring-1 ring-emerald-200/60 dark:border-emerald-800 dark:bg-emerald-950/90',
     },
     {
       key: 'monthly',
-      title: 'Monthly tasks',
-      description: 'Big-picture goals',
+      title: 'Monthly',
+      description: 'Month-end',
       accent: 'from-indigo-500 to-violet-500',
-      ring: 'ring-indigo-400/40',
-      bg: 'bg-indigo-50/80 dark:bg-indigo-950/30',
-      listBorder: 'border-indigo-200/80',
+      ring: 'ring-indigo-300/60',
+      bg: 'bg-indigo-50/90 dark:bg-indigo-950/40',
+      listBorder: 'border-indigo-200/70',
+      btn: 'bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-400 hover:to-violet-400',
+      inputRing: 'focus-visible:ring-indigo-400',
+      paginationBar:
+        'border-indigo-300/80 bg-indigo-50 ring-1 ring-indigo-200/60 dark:border-indigo-800 dark:bg-indigo-950/90',
     },
   ]
+
+  const totalTaskCount = dailyTasks.length + weeklyTasks.length + monthlyTasks.length
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-gradient-to-br from-violet-200/70 via-fuchsia-100/80 to-cyan-200/70">
       <header className="shrink-0 border-b border-white/40 bg-white/60 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-2">
-          <div className="flex min-w-0 items-center gap-2">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-2.5">
+          <div className="flex min-w-0 items-center gap-2.5">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white shadow-md shadow-violet-500/30">
               <Sparkles className="h-4 w-4" aria-hidden />
             </span>
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-violet-950">Task Planner</p>
-              <p className="truncate text-xs text-violet-800/70">Your colorful command center</p>
+              <p className="truncate text-xs text-violet-800/70">Task Manager</p>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {user?.email ? (
-              <span className="hidden max-w-[140px] truncate text-xs text-violet-900/80 lg:inline">
+              <span className="hidden max-w-[160px] truncate text-xs text-violet-900/80 lg:inline">
                 {user.email}
               </span>
             ) : null}
@@ -391,11 +497,16 @@ export default function TaskManager() {
             >
               <Link to="/habits" title="Habit Tracker">
                 <ListChecks className="h-4 w-4" />
-                <span className="hidden sm:inline ml-1">Habits</span>
+                <span className="ml-1 hidden sm:inline">Habits</span>
               </Link>
             </Button>
-            <Button variant="outline" size="sm" asChild className="h-8 border-violet-300 bg-white/80 px-2">
-              <Link to="/">
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+              className="h-8 border-violet-300 bg-white/80 px-2"
+            >
+              <Link to="/" title="Home">
                 <Home className="h-4 w-4" />
               </Link>
             </Button>
@@ -404,7 +515,7 @@ export default function TaskManager() {
               size="sm"
               type="button"
               onClick={signOut}
-              className="h-8 gap-1 bg-violet-100 px-2 text-violet-900 hover:bg-violet-200"
+              className="h-8 gap-1 bg-violet-100 px-3 text-violet-900 hover:bg-violet-200"
             >
               <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline">Sign out</span>
@@ -413,34 +524,43 @@ export default function TaskManager() {
         </div>
       </header>
 
-      <main className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden px-4 py-2">
+      <main className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden px-5 py-4">
         {toast ? <Toast message={toast.message} variant={toast.variant} /> : null}
 
         <form
           onSubmit={onSave}
-          className="mx-auto flex min-h-0 w-full max-w-[840px] flex-1 flex-col overflow-hidden"
+          className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden"
         >
-          <div className="mb-2 shrink-0 overflow-hidden rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-500 to-cyan-500 p-px shadow-md">
-            <div className="flex items-center justify-between gap-2 rounded-[11px] bg-white/95 px-2.5 py-1.5 backdrop-blur dark:bg-slate-950/95">
-              <div className="flex min-w-0 items-center gap-2">
-                <CalendarDays className="h-3.5 w-3.5 shrink-0 text-fuchsia-600" aria-hidden />
+          <div className="shrink-0 overflow-hidden rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-500 to-cyan-500 p-px shadow-md">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[11px] bg-white/95 px-4 py-3 backdrop-blur dark:bg-slate-950/95">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <CalendarDays className="h-4 w-4 shrink-0 text-fuchsia-600" aria-hidden />
                 <div className="min-w-0">
                   <p className="text-[10px] font-medium uppercase tracking-wide text-fuchsia-700">
-                    Current month
+                    Planning for
                   </p>
-                  <h1 className="truncate text-base font-bold leading-tight text-slate-900 dark:text-white">
+                  <h1 className="truncate text-lg font-bold leading-tight text-slate-900 dark:text-white">
                     {monthTitle}
                   </h1>
                 </div>
               </div>
-              <span className="shrink-0 rounded-md bg-violet-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-violet-900 dark:bg-violet-950 dark:text-violet-100">
-                {monthKey}
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-lg bg-violet-100 px-2.5 py-1 font-mono text-[11px] font-semibold text-violet-900 dark:bg-violet-950 dark:text-violet-100">
+                  {monthKey}
+                </span>
+                <span className="rounded-lg bg-fuchsia-50 px-2.5 py-1 text-[11px] font-medium text-fuchsia-900 ring-1 ring-fuchsia-200/80 dark:bg-fuchsia-950/50 dark:text-fuchsia-100">
+                  {totalTaskCount} task{totalTaskCount === 1 ? '' : 's'} total
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="flex min-h-2 flex-1 flex-col overflow-hidden pb-2 pt-10">
-            <div className="grid w-full grid-cols-3 gap-3">
+          <p className="shrink-0 px-1 text-center text-xs text-violet-900/75 dark:text-violet-200/75">
+            Add task names for each rhythm — saves automatically when you add, edit, or remove
+          </p>
+
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-white/70 bg-white/40 p-3 shadow-sm ring-1 ring-violet-200/50 backdrop-blur-sm dark:border-slate-800/50 dark:bg-slate-900/25">
+            <div className="grid grid-cols-3 items-start gap-3">
               {sections.map((s) => {
                 const { tasks, draft, setDraft } = getSectionState(s.key)
                 const page = listPage[s.key]
@@ -452,31 +572,43 @@ export default function TaskManager() {
                   <Card
                     key={s.key}
                     className={cn(
-                      'flex h-[320px] min-w-0 flex-col overflow-hidden border-0 shadow-md ring-1',
+                      'relative flex min-w-0 flex-col border-0 shadow-sm ring-1',
                       s.ring,
                     )}
                   >
                     <CardHeader
                       className={cn(
-                        'shrink-0 space-y-0.5 bg-gradient-to-r px-3 py-2.5 text-white',
+                        'shrink-0 space-y-0 bg-gradient-to-r px-3.5 py-2.5 text-white',
                         s.accent,
                       )}
                     >
-                      <CardTitle className="text-base leading-tight">{s.title}</CardTitle>
-                      <CardDescription className="text-xs leading-tight text-white/90">
-                        {s.description}
-                      </CardDescription>
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <CardTitle className="text-sm font-bold leading-tight">
+                            {s.title}
+                          </CardTitle>
+                          <CardDescription className="text-[11px] text-white/90">
+                            {s.description}
+                          </CardDescription>
+                        </div>
+                        <span className="rounded-md bg-white/25 px-2 py-0.5 text-xs font-semibold tabular-nums">
+                          {tasks.length}
+                        </span>
+                      </div>
                     </CardHeader>
                     <CardContent
-                      className={cn('flex min-h-0 flex-1 flex-col gap-2 p-2.5', s.bg)}
+                      className={cn('flex flex-col gap-2 p-3 pb-12', s.bg)}
                     >
-                      <div className="flex shrink-0 gap-1">
+                      <div className="flex shrink-0 gap-2">
                         <Input
                           value={draft}
                           onChange={(e) => setDraft(e.target.value)}
-                          placeholder="Add a task…"
+                          placeholder="Task name…"
                           disabled={loading || saving}
-                          className="h-8 flex-1 border-white/80 bg-white/90 text-sm"
+                          className={cn(
+                            'h-9 flex-1 border-white/90 bg-white text-sm shadow-sm',
+                            s.inputRing,
+                          )}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               e.preventDefault()
@@ -487,42 +619,62 @@ export default function TaskManager() {
                         <Button
                           type="button"
                           size="sm"
-                          className="h-8 shrink-0 px-2"
                           disabled={loading || saving || !draft.trim()}
                           onClick={() => void onAdd(s.key)}
+                          title="Add task"
+                          aria-label="Add task"
+                          className={cn(
+                            'h-9 shrink-0 px-3 text-white shadow-sm',
+                            s.btn,
+                          )}
                         >
-                          <Plus className="h-4 w-4" />
+                          <CirclePlus className="h-[1.15rem] w-[1.15rem]" strokeWidth={2} />
                         </Button>
                       </div>
 
                       <ul
                         className={cn(
-                          'min-h-0 flex-1 space-y-1.5 overflow-y-auto rounded-lg border bg-white/70 p-2 dark:bg-slate-900/40',
+                          'shrink-0 space-y-0.5 overflow-hidden rounded-xl border bg-white/80 p-1.5 shadow-inner',
+                          TASK_LIST_H,
                           s.listBorder,
                         )}
                       >
                         {loading ? (
-                          <li className="py-6 text-center text-xs text-slate-500">Loading…</li>
+                          <li
+                            className={cn(
+                              'flex h-full items-center justify-center text-xs text-slate-500',
+                              TASK_LIST_H,
+                            )}
+                          >
+                            Loading…
+                          </li>
                         ) : pageTasks.length === 0 ? (
-                          <li className="py-6 text-center text-xs text-slate-500">
-                            No tasks yet
+                          <li
+                            className={cn(
+                              'flex h-full flex-col items-center justify-center gap-1 px-2 text-center text-xs text-slate-500',
+                              TASK_LIST_H,
+                            )}
+                          >
+                            <span>No tasks yet</span>
+                            <span className="text-[10px] opacity-80">Type above and press +</span>
                           </li>
                         ) : (
-                          pageTasks.map((task, i) => {
+                          <>
+                          {pageTasks.map((task, i) => {
                             const index = start + i
                             const isEditing =
                               editing?.section === s.key && editing?.index === index
 
                             return (
                               <li
-                                key={`${s.key}-${index}-${task}`}
-                                className="flex items-center gap-1 rounded-md border border-transparent bg-white/60 px-2 py-1.5 dark:bg-slate-800/60"
+                                key={`${s.key}-${task.id ?? index}-${task.taskName}`}
+                                className="flex h-8 shrink-0 items-center gap-1 rounded-md border border-slate-200/60 bg-white px-1.5 py-0 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/80"
                               >
                                 {isEditing ? (
                                   <Input
                                     autoFocus
-                                    defaultValue={task}
-                                    className="h-7 flex-1 text-sm"
+                                    defaultValue={task.taskName}
+                                    className={cn('h-7 flex-1 text-xs', s.inputRing)}
                                     disabled={saving}
                                     onBlur={(e) =>
                                       void onSaveEdit(s.key, index, e.target.value)
@@ -536,98 +688,89 @@ export default function TaskManager() {
                                     }}
                                   />
                                 ) : (
-                                  <span className="flex-1 truncate text-sm text-slate-800 dark:text-slate-100">
-                                    {task}
+                                  <span className="flex-1 truncate text-xs font-medium text-slate-800 dark:text-slate-100">
+                                    {task.taskName}
                                   </span>
                                 )}
                                 <Button
                                   type="button"
                                   variant="ghost"
                                   size="sm"
-                                  className="h-7 w-7 shrink-0 p-0 text-violet-700"
+                                  className="h-7 w-7 shrink-0 p-0 text-violet-600 hover:bg-violet-50"
                                   disabled={loading || saving}
                                   onClick={() => setEditing({ section: s.key, index })}
                                   aria-label="Edit task"
                                 >
-                                  <Pencil className="h-3.5 w-3.5" />
+                                  <Pencil className="h-3 w-3" />
                                 </Button>
                                 <Button
                                   type="button"
                                   variant="ghost"
                                   size="sm"
-                                  className="h-7 w-7 shrink-0 p-0 text-red-600 hover:text-red-700"
+                                  className="h-7 w-7 shrink-0 p-0 text-red-500 hover:bg-red-50 hover:text-red-600"
                                   disabled={loading || saving}
                                   onClick={() => void onRemove(s.key, index)}
                                   aria-label="Delete task"
                                 >
-                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <Trash2 className="h-3 w-3" />
                                 </Button>
                               </li>
                             )
-                          })
+                          })}
+                          {pageTasks.length < TASKS_PER_PAGE &&
+                            Array.from({
+                              length: TASKS_PER_PAGE - pageTasks.length,
+                            }).map((_, padIdx) => (
+                              <li
+                                key={`${s.key}-pad-${padIdx}`}
+                                className="h-8 shrink-0 rounded-md border border-transparent"
+                                aria-hidden
+                              />
+                            ))}
+                          </>
                         )}
                       </ul>
-
-                      {tasks.length > TASKS_PER_PAGE ? (
-                        <div className="flex shrink-0 items-center justify-between gap-1">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-7 px-2"
-                            disabled={page <= 1}
-                            onClick={() =>
-                              setListPage((p) => ({
-                                ...p,
-                                [s.key]: Math.max(1, page - 1),
-                              }))
-                            }
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                          </Button>
-                          <span className="text-xs text-violet-900/80">
-                            {page} / {pages}
-                          </span>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-7 px-2"
-                            disabled={page >= pages}
-                            onClick={() =>
-                              setListPage((p) => ({
-                                ...p,
-                                [s.key]: Math.min(pages, page + 1),
-                              }))
-                            }
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ) : null}
                     </CardContent>
+
+                    {tasks.length > 0 ? (
+                      <div className="absolute inset-x-3 bottom-3 z-10">
+                        <TaskListPagination
+                          page={page}
+                          pages={pages}
+                          disabled={loading || saving}
+                          accentClass={s.paginationBar}
+                          onPageChange={(nextPage) =>
+                            setListPage((p) => ({
+                              ...p,
+                              [s.key]: Math.min(
+                                pages,
+                                Math.max(1, nextPage),
+                              ),
+                            }))
+                          }
+                        />
+                      </div>
+                    ) : null}
                   </Card>
                 )
               })}
             </div>
           </div>
 
-          <div className="mt-2 shrink-0 space-y-1.5 pb-1">
-            <div className="flex justify-end">
-              <Button
-                type="submit"
-                size="sm"
-                disabled={loading || saving}
-                className="h-8 px-5 text-sm bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-sm hover:from-violet-500 hover:to-fuchsia-500"
-              >
-                {saving ? 'Saving…' : 'Update this month'}
-              </Button>
-            </div>
-            <p className="text-right text-[11px] leading-snug text-violet-900/70">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-white/60 bg-white/55 px-4 py-3 ring-1 ring-violet-200/40 backdrop-blur-sm">
+            <p className="max-w-xl text-xs leading-relaxed text-violet-900/80 dark:text-violet-100/80">
               {existingId
-                ? `You already have a plan for ${monthTitle}. Trash deletes a task immediately; pencil edits save on blur.`
-                : `No plan for ${monthTitle} yet. Add tasks and click Update this month to save.`}
+                ? `Plan active for ${monthTitle}. Edits save on blur; trash removes immediately.`
+                : `No saved plan for ${monthTitle} yet — add tasks, then sync below.`}
             </p>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={loading || saving || totalTaskCount === 0}
+              className="h-9 shrink-0 px-5 text-sm bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-sm hover:from-violet-500 hover:to-fuchsia-500"
+            >
+              {saving ? 'Saving…' : existingId ? 'Sync month plan' : 'Save month plan'}
+            </Button>
           </div>
         </form>
       </main>

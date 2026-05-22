@@ -31,6 +31,8 @@ const buildSubTasksFromPlan = (items: PlanTaskItem[]): ReviewSubTask[] =>
     isCompleted: false,
   }));
 
+const normalizeTaskName = (name: string): string => name.trim().toLowerCase();
+
 const mergeSubTasksWithExisting = (
   planItems: PlanTaskItem[],
   existingTasks: ReviewSubTask[] = [],
@@ -38,16 +40,32 @@ const mergeSubTasksWithExisting = (
   const existingById = new Map(
     existingTasks.map((t) => [t.subTaskId.toString(), t]),
   );
+  const usedExistingIds = new Set<string>();
 
   return planItems.map((item) => {
-    const existing = existingById.get(item._id.toString());
+    let existing = existingById.get(item._id.toString());
+
+    if (!existing) {
+      const planName = normalizeTaskName(item.taskName);
+      for (const prev of existingTasks) {
+        const prevId = prev.subTaskId.toString();
+        if (usedExistingIds.has(prevId)) continue;
+        if (normalizeTaskName(prev.subTaskName) === planName) {
+          existing = prev;
+          break;
+        }
+      }
+    }
+
     if (existing) {
+      usedExistingIds.add(existing.subTaskId.toString());
       return {
         subTaskId: item._id,
         subTaskName: item.taskName,
         isCompleted: existing.isCompleted,
       };
     }
+
     return {
       subTaskId: item._id,
       subTaskName: item.taskName,
@@ -189,9 +207,11 @@ const deleteReviewTaskByTaskId = async (
   userId: string,
   session?: ClientSession,
 ): Promise<void> => {
-  await ReviewTask.deleteOne({ TaskId: taskId, userId }).session(
-    session ?? null,
-  );
+  const query = ReviewTask.deleteOne({ TaskId: taskId, userId });
+  if (session) {
+    query.session(session);
+  }
+  await query;
 };
 
 const DEFAULT_PAGE = 1;
