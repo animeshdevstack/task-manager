@@ -10,7 +10,9 @@ React + Vite frontend with PWA support.
 
 **Try locally:** `npm run build && npm run preview`, then use DevTools → Application → Manifest / Service workers, or use “Install app” in the browser menu.
 
-**Icons:** `public/icon.svg`, `public/maskable-icon.svg`, `public/favicon.svg`.
+**Icons:** PNG install icons (`manifest-icon-192.maskable.png`, `manifest-icon-512.maskable.png`) plus `public/icon.svg`, `public/favicon.svg`. Regenerate PNGs from SVG: `npx pwa-asset-generator public/icon.svg public --icon-only --favicon false`.
+
+**Vercel:** `vercel.json` rewrites all routes to `index.html` (fixes refresh on `/login`, etc.). Set project Root Directory to `client`, Output Directory to `dist`, Build Command `npm run build`.
 
 ---
 

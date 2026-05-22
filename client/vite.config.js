@@ -20,8 +20,16 @@ export default defineConfig(({ mode }) => {
       react(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.svg', 'icon.svg', 'maskable-icon.svg'],
+        includeAssets: [
+          'favicon.svg',
+          'icon.svg',
+          'maskable-icon.svg',
+          'manifest-icon-192.maskable.png',
+          'manifest-icon-512.maskable.png',
+          'apple-icon-180.png',
+        ],
         manifest: {
+          id: '/',
           name: 'Task Planner',
           short_name: 'Task Planner',
           description:
@@ -34,21 +42,21 @@ export default defineConfig(({ mode }) => {
           start_url: '/',
           icons: [
             {
-              src: 'icon.svg',
+              src: '/manifest-icon-192.maskable.png',
               sizes: '192x192',
-              type: 'image/svg+xml',
+              type: 'image/png',
               purpose: 'any',
             },
             {
-              src: 'icon.svg',
+              src: '/manifest-icon-512.maskable.png',
               sizes: '512x512',
-              type: 'image/svg+xml',
+              type: 'image/png',
               purpose: 'any',
             },
             {
-              src: 'maskable-icon.svg',
+              src: '/manifest-icon-512.maskable.png',
               sizes: '512x512',
-              type: 'image/svg+xml',
+              type: 'image/png',
               purpose: 'maskable',
             },
           ],
