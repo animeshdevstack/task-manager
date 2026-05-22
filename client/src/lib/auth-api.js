@@ -5,6 +5,19 @@
  */
 const API_BASE = import.meta.env.VITE_API_URL ?? ''
 
+/** Leftover keys from older builds; app uses accessToken only. */
+const LEGACY_STORAGE_KEYS = ['authToken']
+
+function purgeLegacyAuthStorage() {
+  for (const key of LEGACY_STORAGE_KEYS) {
+    try {
+      localStorage.removeItem(key)
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 function getErrorMessage(data, status) {
   if (data?.message && typeof data.message === 'string') return data.message
   const err = data?.error
@@ -34,6 +47,7 @@ export async function authRequest(path, options = {}) {
 }
 
 export function saveSession(payload) {
+  purgeLegacyAuthStorage()
   const { accessToken, refreshToken, user } = payload
   if (accessToken) localStorage.setItem('accessToken', accessToken)
   if (refreshToken) localStorage.setItem('refreshToken', refreshToken)
@@ -44,7 +58,10 @@ export function clearSession() {
   localStorage.removeItem('accessToken')
   localStorage.removeItem('refreshToken')
   localStorage.removeItem('user')
+  purgeLegacyAuthStorage()
 }
+
+purgeLegacyAuthStorage()
 
 export function getStoredUser() {
   try {

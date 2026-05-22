@@ -37,7 +37,7 @@ export default function Login() {
         body: JSON.stringify({ email, password }),
       })
       saveSession(res.data)
-      navigate('/tasks', { replace: true })
+      navigate('/', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign in failed')
     } finally {

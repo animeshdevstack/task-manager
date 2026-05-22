@@ -53,7 +53,7 @@ export default function Signup() {
         body: JSON.stringify(body),
       })
       saveSession(res.data)
-      navigate('/tasks', { replace: true })
+      navigate('/', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create account')
     } finally {
