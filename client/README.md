@@ -1,3 +1,19 @@
+# Task Planner (client)
+
+React + Vite frontend with PWA support.
+
+## PWA
+
+- Installable on mobile and desktop (Chrome, Edge, Safari).
+- Offline shell: cached static assets; API calls always use the network.
+- Production build registers a service worker (`vite-plugin-pwa`).
+
+**Try locally:** `npm run build && npm run preview`, then use DevTools → Application → Manifest / Service workers, or use “Install app” in the browser menu.
+
+**Icons:** `public/icon.svg`, `public/maskable-icon.svg`, `public/favicon.svg`.
+
+---
+
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
