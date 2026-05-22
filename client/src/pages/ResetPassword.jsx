@@ -142,6 +142,7 @@ export default function ResetPassword() {
                   </Label>
                   <PasswordInput
                     id="confirmPassword"
+                    placeholder="Password"
                     autoComplete="new-password"
                     required
                     disabled={missingToken || success}
