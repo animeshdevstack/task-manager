@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Home,
+  ListChecks,
   LogOut,
   Pencil,
   Plus,
@@ -128,7 +129,9 @@ export default function TaskManager() {
     navigate('/login', { replace: true })
   }
 
-  function applyPlanFromHit(hit) {
+  function applyPlanFromHit(hit, options = {}) {
+    const { lastPageSection } = options
+
     if (hit?._id) {
       setExistingId(hit._id)
       setDailyTasks(fromDocTasks(hit.DailyTasks))
@@ -140,14 +143,34 @@ export default function TaskManager() {
       setWeeklyTasks([])
       setMonthlyTasks([])
     }
-    setListPage({ daily: 1, weekly: 1, monthly: 1 })
+
+    const counts = {
+      daily: hit?._id ? fromDocTasks(hit.DailyTasks).length : 0,
+      weekly: hit?._id ? fromDocTasks(hit.WeeklyTasks).length : 0,
+      monthly: hit?._id ? fromDocTasks(hit.MonthlyTasks).length : 0,
+    }
+
+    setListPage((prev) => ({
+      daily:
+        lastPageSection === 'daily'
+          ? totalPages(counts.daily)
+          : Math.min(prev.daily, totalPages(counts.daily)),
+      weekly:
+        lastPageSection === 'weekly'
+          ? totalPages(counts.weekly)
+          : Math.min(prev.weekly, totalPages(counts.weekly)),
+      monthly:
+        lastPageSection === 'monthly'
+          ? totalPages(counts.monthly)
+          : Math.min(prev.monthly, totalPages(counts.monthly)),
+    }))
   }
 
-  async function refetchMonthPlan() {
+  async function refetchMonthPlan(options = {}) {
     const res = await tasksRequest('/get-tasks?page=1&limit=50')
     const list = res.data?.tasks ?? []
     const hit = list.find((t) => t.currentMonthAndYear === monthKey)
-    applyPlanFromHit(hit)
+    applyPlanFromHit(hit, options)
     return hit
   }
 
@@ -167,7 +190,7 @@ export default function TaskManager() {
     )
   }
 
-  async function persistLists(lists) {
+  async function persistLists(lists, options = {}) {
     const body = buildPayload(lists)
     if (isPayloadEmpty(body)) {
       throw new Error('Add at least one task somewhere.')
@@ -186,7 +209,7 @@ export default function TaskManager() {
           body: JSON.stringify(body),
         })
       }
-      await refetchMonthPlan()
+      await refetchMonthPlan(options)
     } finally {
       setSaving(false)
     }
@@ -235,11 +258,11 @@ export default function TaskManager() {
     }))
 
     try {
-      await persistLists({ ...currentLists(), [section]: next })
+      await persistLists({ ...currentLists(), [section]: next }, { lastPageSection: section })
       showToast('Task added', 'success')
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Could not save', 'error')
-      await refetchMonthPlan()
+      await refetchMonthPlan({ lastPageSection: section })
     }
   }
 
@@ -360,6 +383,17 @@ export default function TaskManager() {
                 {user.email}
               </span>
             ) : null}
+            <Button
+              variant="outline"
+              size="sm"
+              asChild
+              className="h-8 border-violet-300 bg-white/80 px-2"
+            >
+              <Link to="/habits" title="Habit Tracker">
+                <ListChecks className="h-4 w-4" />
+                <span className="hidden sm:inline ml-1">Habits</span>
+              </Link>
+            </Button>
             <Button variant="outline" size="sm" asChild className="h-8 border-violet-300 bg-white/80 px-2">
               <Link to="/">
                 <Home className="h-4 w-4" />

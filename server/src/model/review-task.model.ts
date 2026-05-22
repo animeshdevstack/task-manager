@@ -1,95 +1,65 @@
 import { Schema, model } from "mongoose";
 
-const dailyTaskSchema = new Schema(
+const reviewSubTaskSchema = new Schema(
   {
-    DailyTasks: [
-      {
-        todayDate: {
-          type: Date,
-          required: true,
-        },
-        Task: [
-          {
-            subTaskId: {
-              type: Schema.Types.ObjectId,
-              ref: "SubTask",
-              required: true,
-            },
-            subTaskName: {
-              type: String,
-              required: true,
-            },
-            isCompleted: {
-              type: Boolean,
-              required: true,
-            },
-          },
-        ],
-      },
-    ],
-  }
+    subTaskId: {
+      type: Schema.Types.ObjectId,
+      required: true,
+    },
+    subTaskName: {
+      type: String,
+      required: true,
+    },
+    isCompleted: {
+      type: Boolean,
+      required: true,
+      default: false,
+    },
+  },
+  { _id: false },
 );
 
-const weeklyTaskSchema = new Schema(
+const reviewDailyEntrySchema = new Schema(
   {
-    WeeklyTasks: [
-      {
-        sundayDate: {
-          type: Date,
-          required: true,
-        },
-        Task: [
-          {
-            subTaskId: {
-              type: Schema.Types.ObjectId,
-              ref: "SubTask",
-              required: true,
-            },
-            subTaskName: {
-              type: String,
-              required: true,
-            },
-            isCompleted: {
-              type: Boolean,
-              required: true,
-            },
-          },
-        ],
-      },
-    ],
-  }
+    todayDate: {
+      type: Date,
+      required: true,
+    },
+    Task: {
+      type: [reviewSubTaskSchema],
+      default: [],
+    },
+  },
+  { _id: false },
 );
 
-const monthlyTaskSchema = new Schema(
+const reviewWeeklyEntrySchema = new Schema(
   {
-    MonthlyTasks: {
-        monthEndDate: {
-          type: Date,
-          required: true,
-        },
-        Task: [
-          {
-            subTaskId: {
-              type: Schema.Types.ObjectId,
-              ref: "SubTask",
-              required: true,
-            },
-            subTaskName: {
-              type: String,
-              required: true,
-            },
-            isCompleted: {
-              type: Boolean,
-              required: true,
-            },
-          },
-        ],
-      },
-  }
+    sundayDate: {
+      type: Date,
+      required: true,
+    },
+    Task: {
+      type: [reviewSubTaskSchema],
+      default: [],
+    },
+  },
+  { _id: false },
 );
 
-
-
+const reviewMonthlyEntrySchema = new Schema(
+  {
+    monthEndDate: {
+      type: Date,
+      required: true,
+    },
+    Task: {
+      type: [reviewSubTaskSchema],
+      default: [],
+    },
+  },
+  { _id: false },
+);
 
 const reviewTaskSchema = new Schema(
   {
@@ -104,15 +74,17 @@ const reviewTaskSchema = new Schema(
       required: true,
     },
     DailyTasks: {
-      type: dailyTaskSchema,
+      type: [reviewDailyEntrySchema],
       required: true,
+      default: [],
     },
     WeeklyTasks: {
-      type: weeklyTaskSchema,
+      type: [reviewWeeklyEntrySchema],
       required: true,
+      default: [],
     },
     MonthlyTasks: {
-      type: monthlyTaskSchema,
+      type: reviewMonthlyEntrySchema,
       required: true,
     },
   },
