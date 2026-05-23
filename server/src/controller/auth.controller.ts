@@ -42,6 +42,13 @@ const Signin = async(req: Request, res: Response) => {
 const RefreshToken = async(req: Request, res: Response) => {
   try {
     const refreshToken = req.body.refreshToken;
+    if (!refreshToken || typeof refreshToken !== "string") {
+      res.status(400).json({
+        success: false,
+        message: "Refresh token is required",
+      });
+      return;
+    }
     const refreshTokenData = await RefreshTokenService(refreshToken);
     res.status(200).json({
       success: true,
@@ -49,10 +56,12 @@ const RefreshToken = async(req: Request, res: Response) => {
       data: refreshTokenData,
     });
   } catch (error) {
-    res.status(500).json({
+    res.status(401).json({
       success: false,
-      message: "Internal server error",
-      error: error,
+      message:
+        error instanceof Error
+          ? error.message
+          : "Invalid or expired refresh token",
     });
   }
 }

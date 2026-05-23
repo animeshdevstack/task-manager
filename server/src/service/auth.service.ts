@@ -16,19 +16,19 @@ const SignupService = async(data: any): Promise<any> => {
     await user.save();
     const raw = createToken({
       email: user.email.toLowerCase(),
-    });
+    }, '1h');
     await VerifyEmail(user.email, raw);
     console.info(`Email verification email sent to ${user.email}`);
     const accessToken = createToken({
       id: user._id.toString(),
       email: user.email,
       role: user.role,
-    });
+    }, '1h');
     const refreshToken = createToken({
       id: user._id.toString(),
       email: user.email,
       role: user.role,
-    });
+    }, '90d');
     return {
       accessToken,
       refreshToken,
@@ -60,12 +60,12 @@ const SigninService = async(data: any): Promise<any> => {
       id: user._id.toString(),
       email: user.email,
       role: user.role,
-    });
+    }, "1h");
     const refreshToken = createToken({
       id: user._id.toString(),
       email: user.email,
       role: user.role,
-    });
+    }, "90d");
     return {
       accessToken,
       refreshToken,
@@ -95,10 +95,10 @@ const RefreshTokenService = async(refreshToken: string): Promise<any> => {
       throw new Error("User not found");
     }
     const accessToken = createToken({
-      id: decoded.id,
-      email: decoded.email,
-      role: decoded.role,
-    });
+      id: user._id.toString(),
+      email: user.email,
+      role: user.role,
+    }, "1h");
     return {
       accessToken,
       user: {
@@ -124,7 +124,7 @@ const ForgotPasswordService = async(data: any): Promise<any> => {
     }
     const raw = createToken({
       email: isUserExists.email.toLowerCase(),
-    });
+    }, '15m');
     await ForgetPasswordEmail(isUserExists.email, raw);
     console.info(`Password reset email sent to ${isUserExists.email}`);
     return raw;
