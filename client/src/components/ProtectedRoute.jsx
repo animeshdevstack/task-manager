@@ -1,18 +1,19 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { hasActiveSession } from '@/lib/auth-api'
 
 export function ProtectedRoute({ children }) {
   const navigate = useNavigate()
-  const hasToken =
-    typeof window !== 'undefined' && !!localStorage.getItem('accessToken')
+  const hasSession =
+    typeof window !== 'undefined' && hasActiveSession()
 
   useEffect(() => {
-    if (!localStorage.getItem('accessToken')) {
+    if (!hasActiveSession()) {
       navigate('/login', { replace: true })
     }
   }, [navigate])
 
-  if (!hasToken) {
+  if (!hasSession) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-violet-100 via-white to-cyan-100">
         <p className="text-sm font-medium text-violet-900/70">Loading…</p>

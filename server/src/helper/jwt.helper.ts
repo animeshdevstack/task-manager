@@ -1,20 +1,25 @@
-import jwt from "jsonwebtoken";
+import jwt, { type SignOptions } from "jsonwebtoken";
 import configuration from "../config/configuration";
 
-const createToken = (payload: any): string => {
-  return jwt.sign(payload, configuration.JWT_SECRET, { expiresIn: "1h" });
+export interface AuthTokenPayload {
+  id?: string;
+  email?: string;
+  role?: string;
 }
 
-const signAccessToken = (payload: any): string => {
-  return jwt.sign(payload, configuration.JWT_SECRET, { expiresIn: "1h" });
-}
+const createToken = (
+  payload: AuthTokenPayload,
+  expiresIn: SignOptions["expiresIn"] = "1h",
+): string => {
+  return jwt.sign(payload, configuration.JWT_SECRET, { expiresIn });
+};
 
-const signRefreshToken = (payload: any): string => {
-  return jwt.sign(payload, configuration.JWT_SECRET, { expiresIn: "7d" });
-}
+const verifyToken = (token: string): AuthTokenPayload => {
+  const decoded = jwt.verify(token, configuration.JWT_SECRET);
+  if (typeof decoded === "string") {
+    throw new Error("Invalid token payload");
+  }
+  return decoded as AuthTokenPayload;
+};
 
-const verifyToken = (token: string): any => {
-  return jwt.verify(token, configuration.JWT_SECRET);
-}
-
-export { createToken, signAccessToken, signRefreshToken, verifyToken };
+export { createToken, verifyToken };
