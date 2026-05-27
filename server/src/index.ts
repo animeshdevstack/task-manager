@@ -5,6 +5,7 @@ import configuration from "./config/configuration";
 import Connection from "./libs/connection";
 import addTasksRouter from "./routes/add-tasks.route";
 import reviewTaskRouter from "./routes/review-task.route";
+import followRouter from "./routes/follow.route";
 const app = express();
 
 const PORT = configuration.PORT;
@@ -44,6 +45,7 @@ app.get("/", (_req: Request, res: Response) => {
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/add-tasks", addTasksRouter);
 app.use("/api/v1/review-tasks", reviewTaskRouter);
+app.use("/api/v1/follow", followRouter);
 
 async function start() {
   await Connection();

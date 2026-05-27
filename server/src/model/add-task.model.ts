@@ -6,6 +6,10 @@ const taskNameItemSchema = new Schema(
       type: String,
       required: true,
     },
+    isPrivate: {
+      type: Boolean,
+      default: false,
+    },
   },
   { _id: true },
 );
