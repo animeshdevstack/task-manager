@@ -7,6 +7,11 @@ import Signup from '@/pages/Signup'
 import TaskManager from '@/pages/TaskManager'
 import HabitTracker from '@/pages/HabitTracker'
 import Home from '@/pages/Home'
+import Followers from '@/pages/Followers'
+import Following from '@/pages/Following'
+import Pending from '@/pages/Pending'
+import Requests from '@/pages/Requests'
+import UserProfile from '@/pages/UserProfile'
 
 export default function App() {
   return (
@@ -37,6 +42,46 @@ export default function App() {
           element={
             <ProtectedRoute>
               <HabitTracker />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/requests"
+          element={
+            <ProtectedRoute>
+              <Requests />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/pending"
+          element={
+            <ProtectedRoute>
+              <Pending />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/followers"
+          element={
+            <ProtectedRoute>
+              <Followers />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/following"
+          element={
+            <ProtectedRoute>
+              <Following />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile/:userId"
+          element={
+            <ProtectedRoute>
+              <UserProfile />
             </ProtectedRoute>
           }
         />

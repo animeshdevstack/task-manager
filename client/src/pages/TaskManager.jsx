@@ -6,14 +6,14 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  Home,
-  ListChecks,
-  LogOut,
+  Lock,
   Pencil,
   Plus,
   Sparkles,
   Trash2,
+  Unlock,
 } from 'lucide-react'
+import AppPageHeader from '@/components/layout/AppPageHeader'
 import { Button } from '@/components/ui/button'
 import { Toast, TOAST_DURATION_MS } from '@/components/ui/toast'
 import {
@@ -321,7 +321,11 @@ function toTaskPayload(items) {
       if (!taskName) return null
       const id =
         typeof item === 'object' && item?.id ? String(item.id) : undefined
-      return id ? { _id: id, taskName } : { taskName }
+      const isPrivate = Boolean(
+        typeof item === 'object' && item != null && item.isPrivate,
+      )
+      const base = { taskName, isPrivate }
+      return id ? { _id: id, ...base } : base
     })
     .filter(Boolean)
 }
@@ -333,7 +337,7 @@ function fromDocTasks(arr) {
       const taskName = typeof x?.taskName === 'string' ? x.taskName.trim() : ''
       if (!taskName) return null
       const id = x?._id != null ? String(x._id) : undefined
-      return { id, taskName }
+      return { id, taskName, isPrivate: Boolean(x?.isPrivate) }
     })
     .filter(Boolean)
 }
@@ -580,7 +584,7 @@ export default function TaskManager() {
     const name = draft.trim()
     if (!name) return
 
-    const next = [...tasks, { taskName: name }]
+    const next = [...tasks, { taskName: name, isPrivate: false }]
     setTasks(next)
     setDraft('')
     setListPage((p) => ({
@@ -621,6 +625,25 @@ export default function TaskManager() {
     try {
       await persistLists({ ...currentLists(), [section]: next })
       showToast('Task removed', 'remove')
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Could not save', 'error')
+      await refetchMonthPlan()
+    }
+  }
+
+  async function onTogglePrivate(section, index) {
+    const { tasks, setTasks } = getSectionState(section)
+    const next = tasks.map((t, i) =>
+      i === index ? { ...t, isPrivate: !t.isPrivate } : t,
+    )
+    setTasks(next)
+
+    try {
+      await persistLists({ ...currentLists(), [section]: next })
+      showToast(
+        next[index]?.isPrivate ? 'Task marked private' : 'Task visible to followers',
+        'info',
+      )
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Could not save', 'error')
       await refetchMonthPlan()
@@ -766,10 +789,43 @@ export default function TaskManager() {
                         }}
                       />
                     ) : (
-                      <span className="min-w-0 flex-1 truncate text-lg font-medium leading-snug text-slate-800 dark:text-slate-100 md:text-sm md:font-normal">
+                      <span
+                        className={cn(
+                          'min-w-0 flex-1 truncate text-lg font-medium leading-snug md:text-sm md:font-normal',
+                          task.isPrivate
+                            ? 'text-violet-700 dark:text-violet-300'
+                            : 'text-slate-800 dark:text-slate-100',
+                        )}
+                      >
                         {task.taskName}
+                        {task.isPrivate ? (
+                          <span className="ml-1 text-[10px] font-normal text-violet-500">
+                            (private)
+                          </span>
+                        ) : null}
                       </span>
                     )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className={cn(
+                        'h-8 w-8 shrink-0 p-0 md:h-7 md:w-7',
+                        task.isPrivate
+                          ? 'text-amber-700 hover:text-amber-800'
+                          : 'text-slate-400 hover:text-violet-700',
+                      )}
+                      disabled={loading || saving || isEditing}
+                      onClick={() => void onTogglePrivate(s.key, index)}
+                      aria-label={task.isPrivate ? 'Make visible to followers' : 'Mark private'}
+                      title={task.isPrivate ? 'Visible to followers' : 'Private from followers'}
+                    >
+                      {task.isPrivate ? (
+                        <Lock className="h-4 w-4 md:h-3.5 md:w-3.5" />
+                      ) : (
+                        <Unlock className="h-4 w-4 md:h-3.5 md:w-3.5" />
+                      )}
+                    </Button>
                     <Button
                       type="button"
                       variant="ghost"
@@ -813,52 +869,14 @@ export default function TaskManager() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-gradient-to-br from-violet-200/70 via-fuchsia-100/80 to-cyan-200/70">
-      <header className="shrink-0 border-b border-white/40 bg-white/60 backdrop-blur-md">
-        <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-2 px-4 py-2 sm:px-6 md:px-8">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white shadow-md shadow-violet-500/30">
-              <Sparkles className="h-4 w-4" aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-violet-950">Task Planner</p>
-              <p className="truncate text-xs text-violet-800/70">Your colorful command center</p>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {user?.email ? (
-              <span className="hidden max-w-[140px] truncate text-xs text-violet-900/80 lg:inline">
-                {user.email}
-              </span>
-            ) : null}
-            <Button
-              variant="outline"
-              size="sm"
-              asChild
-              className="h-8 border-violet-300 bg-white/80 px-2"
-            >
-              <Link to="/habits" title="Habit Tracker">
-                <ListChecks className="h-4 w-4" />
-                <span className="hidden sm:inline ml-1">Habits</span>
-              </Link>
-            </Button>
-            <Button variant="outline" size="sm" asChild className="h-8 border-violet-300 bg-white/80 px-2">
-              <Link to="/">
-                <Home className="h-4 w-4" />
-              </Link>
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              type="button"
-              onClick={signOut}
-              className="h-8 gap-1 bg-violet-100 px-2 text-violet-900 hover:bg-violet-200"
-            >
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Sign out</span>
-            </Button>
-          </div>
-        </div>
-      </header>
+      <AppPageHeader
+        title="Task Planner"
+        subtitle="Your colorful command center"
+        icon={Sparkles}
+        onSignOut={signOut}
+        navContext="tasks"
+        maxWidthClass="max-w-4xl"
+      />
 
       <main className="flex min-h-0 w-full flex-1 flex-col overflow-hidden px-6 py-2 sm:px-10 md:px-14 lg:px-20">
         {toast ? <Toast message={toast.message} variant={toast.variant} /> : null}

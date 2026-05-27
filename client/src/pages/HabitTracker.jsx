@@ -6,11 +6,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Circle,
-  Home,
   ListChecks,
-  LogOut,
-  Sparkles,
 } from 'lucide-react'
+import AppPageHeader from '@/components/layout/AppPageHeader'
 import { Button } from '@/components/ui/button'
 import { Toast, TOAST_DURATION_MS } from '@/components/ui/toast'
 import {
@@ -514,52 +512,14 @@ export default function HabitTracker() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-gradient-to-br from-violet-200/70 via-fuchsia-100/80 to-cyan-200/70">
-      <header className="shrink-0 border-b border-white/40 bg-white/60 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-500/30">
-              <ListChecks className="h-4 w-4" aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-violet-950">Habit Tracker</p>
-              <p className="truncate text-xs text-violet-800/70">Complete your daily review</p>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {user?.email ? (
-              <span className="hidden max-w-[140px] truncate text-xs text-violet-900/80 lg:inline">
-                {user.email}
-              </span>
-            ) : null}
-            <Button
-              variant="outline"
-              size="sm"
-              asChild
-              className="h-8 border-violet-300 bg-white/80 px-2"
-            >
-              <Link to="/tasks" title="Task manager">
-                <Sparkles className="h-4 w-4" />
-                <span className="hidden sm:inline ml-1">Tasks</span>
-              </Link>
-            </Button>
-            <Button variant="outline" size="sm" asChild className="h-8 border-violet-300 bg-white/80 px-2">
-              <Link to="/">
-                <Home className="h-4 w-4" />
-              </Link>
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              type="button"
-              onClick={signOut}
-              className="h-8 gap-1 bg-violet-100 px-2 text-violet-900 hover:bg-violet-200"
-            >
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Sign out</span>
-            </Button>
-          </div>
-        </div>
-      </header>
+      <AppPageHeader
+        title="Habit Tracker"
+        subtitle="Complete your daily review"
+        icon={ListChecks}
+        onSignOut={signOut}
+        navContext="habits"
+        maxWidthClass="max-w-6xl"
+      />
 
       <main className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden px-4 py-2">
         {toast ? <Toast message={toast.message} variant={toast.variant} /> : null}
