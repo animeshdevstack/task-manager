@@ -1331,7 +1331,7 @@ export default function TaskManager() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-7 gap-1 border-fuchsia-200/80 bg-white/80 px-2 text-[10px] font-medium text-fuchsia-900 hover:bg-fuchsia-50 dark:border-fuchsia-800 dark:bg-slate-900/80 dark:text-fuchsia-100"
+                    className="hidden h-7 gap-1 border-fuchsia-200/80 bg-white/80 px-2 text-[10px] font-medium text-fuchsia-900 hover:bg-fuchsia-50 md:inline-flex dark:border-fuchsia-800 dark:bg-slate-900/80 dark:text-fuchsia-100"
                     disabled={loading || saving || cloning}
                     title={`Copy daily, weekly, and monthly tasks from ${prevMonthTitle} (empty sections only)`}
                     onClick={() => void cloneFromPreviousMonth()}
