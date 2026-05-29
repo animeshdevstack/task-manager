@@ -9,6 +9,7 @@ import {
   ListChecks,
 } from 'lucide-react'
 import AppPageHeader from '@/components/layout/AppPageHeader'
+import DatedDatePicker from '@/components/tasks/DatedDatePicker'
 import { Button } from '@/components/ui/button'
 import { Toast, TOAST_DURATION_MS } from '@/components/ui/toast'
 import {
@@ -55,6 +56,47 @@ function startOfDay(d) {
 
 function addMonths(date, delta) {
   return new Date(date.getFullYear(), date.getMonth() + delta, 1)
+}
+
+function formatDateYmd(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function monthDateBounds(monthKey) {
+  const [year, monthNum] = monthKey.split('-').map(Number)
+  const lastDay = new Date(year, monthNum, 0).getDate()
+  return {
+    min: `${monthKey}-01`,
+    max: `${monthKey}-${String(lastDay).padStart(2, '0')}`,
+  }
+}
+
+function defaultHabitSelectedDate(monthKey, referenceDate) {
+  const { min, max } = monthDateBounds(monthKey)
+  const todayStr = formatDateYmd(referenceDate)
+  if (todayStr >= min && todayStr <= max) return todayStr
+  return min
+}
+
+function shiftDateYmd(ymd, deltaDays) {
+  const [y, m, d] = ymd.split('-').map(Number)
+  return formatDateYmd(new Date(y, m - 1, d + deltaDays))
+}
+
+function buildDatedSubTaskMap(datedTasks) {
+  const map = new Map()
+  for (const entry of datedTasks ?? []) {
+    const date = typeof entry?.date === 'string' ? entry.date.trim() : ''
+    if (!date) continue
+    for (const t of entry?.tasks ?? []) {
+      const id = t._id?.toString?.() ?? (t._id != null ? String(t._id) : null)
+      if (id) map.set(id, date)
+    }
+  }
+  return map
 }
 
 function isDateInMonth(date, viewMonth) {
@@ -109,7 +151,7 @@ function planIdMatches(reviewTaskId, planId) {
 }
 
 const HABIT_TRACKER_TAB_KEY = 'habit-tracker-active-tab'
-const VALID_TABS = new Set(['daily', 'weekly', 'monthly'])
+const VALID_TABS = new Set(['daily', 'weekly', 'monthly', 'dated'])
 
 function getStoredHabitTab() {
   try {
@@ -146,6 +188,14 @@ const TABS = [
     ring: 'ring-indigo-400/40',
     bg: 'bg-indigo-50/80 dark:bg-indigo-950/30',
   },
+  {
+    key: 'dated',
+    title: 'Daily extras habits',
+    description: 'View any day · check off today only',
+    accent: 'from-sky-500 to-blue-500',
+    ring: 'ring-sky-400/40',
+    bg: 'bg-sky-50/80 dark:bg-sky-950/30',
+  },
 ]
 
 export default function HabitTracker() {
@@ -155,6 +205,7 @@ export default function HabitTracker() {
   const [patching, setPatching] = useState(false)
   const [toast, setToast] = useState(null)
   const [review, setReview] = useState(null)
+  const [plan, setPlan] = useState(null)
   const [hasPlan, setHasPlan] = useState(false)
   const [activeTab, setActiveTab] = useState(getStoredHabitTab)
 
@@ -177,6 +228,27 @@ export default function HabitTracker() {
   const monthTitle = useMemo(() => formatMonthTitle(viewMonth), [viewMonth])
   const isViewingCurrentMonth = monthKey === formatYearMonth(today)
   const startOfToday = useMemo(() => startOfDay(today), [today])
+  const todayYmd = useMemo(() => formatDateYmd(today), [today])
+  const viewMonthBounds = useMemo(() => monthDateBounds(monthKey), [monthKey])
+  const [selectedHabitDate, setSelectedHabitDate] = useState(() =>
+    defaultHabitSelectedDate(formatYearMonth(new Date()), new Date()),
+  )
+
+  const datedSubTaskMap = useMemo(
+    () => buildDatedSubTaskMap(plan?.DatedTasks),
+    [plan?.DatedTasks],
+  )
+
+  useEffect(() => {
+    setSelectedHabitDate((prev) => {
+      const { min, max } = monthDateBounds(monthKey)
+      if (prev >= min && prev <= max) return prev
+      return defaultHabitSelectedDate(monthKey, today)
+    })
+  }, [monthKey, today])
+
+  const canUpdateDailyExtrasToday =
+    isViewingCurrentMonth && selectedHabitDate === todayYmd
 
   const goPrevMonth = () => {
     setViewMonth((m) => addMonths(m, -1))
@@ -205,11 +277,13 @@ export default function HabitTracker() {
 
       if (!plan?._id) {
         setHasPlan(false)
+        setPlan(null)
         setReview(null)
         return
       }
 
       setHasPlan(true)
+      setPlan(plan)
 
       const listRes = await reviewRequest('/get-user-review-task?page=1&limit=50')
       const reviews = listRes.data?.tasks ?? []
@@ -229,6 +303,7 @@ export default function HabitTracker() {
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Could not load habits', 'error')
       setReview(null)
+      setPlan(null)
       setHasPlan(false)
     } finally {
       setLoading(false)
@@ -242,6 +317,15 @@ export default function HabitTracker() {
   function signOut() {
     clearSession()
     navigate('/login', { replace: true })
+  }
+
+  function tryToggleDailyExtra(type, slotDate, subTaskId, nextCompleted) {
+    const slotYmd = formatDateYmd(new Date(slotDate))
+    if (!isViewingCurrentMonth || slotYmd !== todayYmd) {
+      showToast('You can only update daily extras for today', 'error')
+      return
+    }
+    void toggleTask(type, slotDate, subTaskId, nextCompleted)
   }
 
   async function toggleTask(type, slotDate, subTaskId, nextCompleted) {
@@ -298,6 +382,7 @@ export default function HabitTracker() {
     for (const entry of review.DailyTasks) {
       for (const t of entry.Task ?? []) {
         const id = t.subTaskId?.toString?.() ?? String(t.subTaskId)
+        if (datedSubTaskMap.has(id)) continue
         if (!taskMap.has(id)) {
           taskMap.set(id, t.subTaskName)
         }
@@ -320,10 +405,21 @@ export default function HabitTracker() {
 
     const todayDay = isViewingCurrentMonth ? today.getDate() : null
     const todaySlot = todayDay != null ? slotByDay.get(todayDay) : null
-    const todayTasks = todaySlot?.Task ?? []
+    const todayTasks = (todaySlot?.Task ?? []).filter((t) => {
+      const id = t.subTaskId?.toString?.() ?? String(t.subTaskId)
+      return !datedSubTaskMap.has(id)
+    })
 
-    return { days, tasks, getCell, todayDay, todaySlot, todayTasks, isViewingCurrentMonth }
-  }, [review, monthKey, today, isViewingCurrentMonth])
+    return {
+      days,
+      tasks,
+      getCell,
+      todayDay,
+      todaySlot,
+      todayTasks,
+      isViewingCurrentMonth,
+    }
+  }, [review, monthKey, today, isViewingCurrentMonth, datedSubTaskMap])
 
   const filteredWeeklySlots = useMemo(() => {
     const slots = review?.WeeklyTasks ?? []
@@ -429,8 +525,42 @@ export default function HabitTracker() {
         canEdit: monthEnd >= startOfToday,
       }
     }
+    if (activeTab === 'dated' && review) {
+      const slot = review.DailyTasks?.find((entry) => {
+        const d = new Date(entry.todayDate)
+        return formatDateYmd(d) === selectedHabitDate
+      })
+      const datedIdsForDay = new Set(
+        [...datedSubTaskMap.entries()]
+          .filter(([, dateYmd]) => dateYmd === selectedHabitDate)
+          .map(([id]) => id),
+      )
+      const tasks = (slot?.Task ?? []).filter((t) => {
+        const id = t.subTaskId?.toString?.() ?? String(t.subTaskId)
+        return datedIdsForDay.has(id)
+      })
+      return {
+        type: 'daily',
+        date: slot?.todayDate ?? new Date(`${selectedHabitDate}T12:00:00`),
+        label: formatDateLabel(new Date(`${selectedHabitDate}T12:00:00`)),
+        tasks,
+        canEdit: canUpdateDailyExtrasToday && Boolean(slot),
+      }
+    }
     return null
-  }, [activeTab, dailyGrid, weeklyGrid, monthlySlot, startOfToday])
+  }, [
+    activeTab,
+    dailyGrid,
+    weeklyGrid,
+    monthlySlot,
+    startOfToday,
+    review,
+    datedSubTaskMap,
+    isViewingCurrentMonth,
+    todayYmd,
+    selectedHabitDate,
+    canUpdateDailyExtrasToday,
+  ])
 
   const progress = useMemo(() => {
     const tasks = activeTasks?.tasks ?? []
@@ -479,6 +609,27 @@ export default function HabitTracker() {
         </>
       )
     }
+    if (activeTab === 'dated') {
+      if (isViewingCurrentMonth) {
+        return (
+          <>
+            Viewing{' '}
+            <span className="font-semibold text-sky-700 dark:text-sky-400">
+              {formatDateLabel(new Date(`${selectedHabitDate}T12:00:00`))}
+            </span>
+            {' · '}
+            Only today&apos;s daily extras can be checked off
+          </>
+        )
+      }
+      return (
+        <>
+          Viewing <span className="font-semibold text-slate-800 dark:text-slate-200">{monthTitle}</span>
+          {' · '}
+          Browse past or future days — switch to the current month to update today
+        </>
+      )
+    }
     if (activeTab === 'weekly') {
       return (
         <>
@@ -506,7 +657,14 @@ export default function HabitTracker() {
         Month-end goals
       </>
     )
-  }, [activeTab, isViewingCurrentMonth, monthTitle, today, weeklyGrid.nextSundayLabel])
+  }, [
+    activeTab,
+    isViewingCurrentMonth,
+    monthTitle,
+    today,
+    weeklyGrid.nextSundayLabel,
+    selectedHabitDate,
+  ])
 
   const tabMeta = TABS.find((t) => t.key === activeTab) ?? TABS[0]
 
@@ -850,6 +1008,118 @@ export default function HabitTracker() {
                       </table>
                     </div>
                   )}
+                </>
+              ) : activeTab === 'dated' ? (
+                <>
+                  <DatedDatePicker
+                    id="habit-dated-date"
+                    value={selectedHabitDate}
+                    min={viewMonthBounds.min}
+                    max={viewMonthBounds.max}
+                    disabled={loading || patching}
+                    prevDisabled={selectedHabitDate <= viewMonthBounds.min}
+                    nextDisabled={selectedHabitDate >= viewMonthBounds.max}
+                    onPrev={() =>
+                      setSelectedHabitDate(shiftDateYmd(selectedHabitDate, -1))
+                    }
+                    onNext={() =>
+                      setSelectedHabitDate(shiftDateYmd(selectedHabitDate, 1))
+                    }
+                    onChange={(e) => {
+                      const value = e.target.value
+                      if (!value) return
+                      if (value < viewMonthBounds.min || value > viewMonthBounds.max) {
+                        showToast('Choose a date in this month', 'error')
+                        return
+                      }
+                      setSelectedHabitDate(value)
+                    }}
+                  />
+
+                  <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto rounded-lg border border-white/80 bg-white/70 p-2 dark:bg-slate-900/40">
+                    {!activeTasks?.tasks?.length ? (
+                      <li className="py-8 text-center text-xs text-slate-500">
+                        No daily extras for this day
+                      </li>
+                    ) : (
+                      activeTasks.tasks.map((task) => {
+                        const id = task.subTaskId?.toString?.() ?? String(task.subTaskId)
+                        const canEdit = activeTasks.canEdit !== false
+
+                        return (
+                          <li key={id}>
+                            {canEdit ? (
+                              <button
+                                type="button"
+                                disabled={patching}
+                                onClick={() =>
+                                  tryToggleDailyExtra(
+                                    activeTasks.type,
+                                    activeTasks.date,
+                                    id,
+                                    !task.isCompleted,
+                                  )
+                                }
+                                className={cn(
+                                  'flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition',
+                                  task.isCompleted
+                                    ? 'border-emerald-300/80 bg-emerald-50/90 dark:bg-emerald-950/40'
+                                    : 'border-transparent bg-white/60 hover:border-violet-200 dark:bg-slate-800/60',
+                                  patching && 'opacity-60',
+                                )}
+                              >
+                                {task.isCompleted ? (
+                                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
+                                ) : (
+                                  <Circle className="h-5 w-5 shrink-0 text-violet-400" />
+                                )}
+                                <span
+                                  className={cn(
+                                    'flex-1 text-sm',
+                                    task.isCompleted
+                                      ? 'text-emerald-900 line-through decoration-emerald-600/50 dark:text-emerald-100'
+                                      : 'text-slate-800 dark:text-slate-100',
+                                  )}
+                                >
+                                  {task.subTaskName}
+                                </span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={patching}
+                                onClick={() =>
+                                  tryToggleDailyExtra(
+                                    activeTasks.type,
+                                    activeTasks.date,
+                                    id,
+                                    !task.isCompleted,
+                                  )
+                                }
+                                className="flex w-full items-center gap-3 rounded-lg border border-transparent bg-white/60 px-3 py-2.5 text-left dark:bg-slate-800/60"
+                              >
+                                {task.isCompleted ? (
+                                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500/80" />
+                                ) : (
+                                  <Circle className="h-5 w-5 shrink-0 text-slate-300 dark:text-slate-600" />
+                                )}
+                                <span
+                                  className={cn(
+                                    'flex-1 text-sm',
+                                    task.isCompleted
+                                      ? 'text-emerald-800/80 line-through dark:text-emerald-200/80'
+                                      : 'text-slate-600 dark:text-slate-400',
+                                  )}
+                                >
+                                  {task.subTaskName}
+                                </span>
+                              </button>
+                            )}
+                          </li>
+                        )
+                      })
+                    )}
+                  </ul>
                 </>
               ) : (
                 <>

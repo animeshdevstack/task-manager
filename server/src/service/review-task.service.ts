@@ -1,102 +1,20 @@
 import { ClientSession, Types } from "mongoose";
+import { AddTask } from "../model/add-task.model";
 import { ReviewTask } from "../model/review-task.model";
 import {
-  getAllDaysInMonth,
-  getAllSundaysInMonth,
-  getLastDayOfMonth,
-  isSameCalendarDay,
-} from "../helper/review-date.helper";
+  buildDatedSubTaskIdMap,
+  formatDateYmd,
+  isAllowedDatedTaskDate,
+} from "../helper/dated-tasks.helper";
+import { isSameCalendarDay } from "../helper/review-date.helper";
+import {
+  AddTaskForReview,
+  buildReviewPayloadFromAddTask,
+  buildSyncedReviewUpdate,
+  toReviewSubTasks,
+} from "../helper/review-sync.helper";
 
-type PlanTaskItem = { _id: Types.ObjectId; taskName: string };
-
-export type AddTaskForReview = {
-  _id: Types.ObjectId;
-  userId: Types.ObjectId;
-  currentMonthAndYear: string;
-  DailyTasks: PlanTaskItem[];
-  WeeklyTasks: PlanTaskItem[];
-  MonthlyTasks: PlanTaskItem[];
-};
-
-type ReviewSubTask = {
-  subTaskId: Types.ObjectId;
-  subTaskName: string;
-  isCompleted: boolean;
-};
-
-const buildSubTasksFromPlan = (items: PlanTaskItem[]): ReviewSubTask[] =>
-  items.map((item) => ({
-    subTaskId: item._id,
-    subTaskName: item.taskName,
-    isCompleted: false,
-  }));
-
-const normalizeTaskName = (name: string): string => name.trim().toLowerCase();
-
-const mergeSubTasksWithExisting = (
-  planItems: PlanTaskItem[],
-  existingTasks: ReviewSubTask[] = [],
-): ReviewSubTask[] => {
-  const existingById = new Map(
-    existingTasks.map((t) => [t.subTaskId.toString(), t]),
-  );
-  const usedExistingIds = new Set<string>();
-
-  return planItems.map((item) => {
-    let existing = existingById.get(item._id.toString());
-
-    if (!existing) {
-      const planName = normalizeTaskName(item.taskName);
-      for (const prev of existingTasks) {
-        const prevId = prev.subTaskId.toString();
-        if (usedExistingIds.has(prevId)) continue;
-        if (normalizeTaskName(prev.subTaskName) === planName) {
-          existing = prev;
-          break;
-        }
-      }
-    }
-
-    if (existing) {
-      usedExistingIds.add(existing.subTaskId.toString());
-      return {
-        subTaskId: item._id,
-        subTaskName: item.taskName,
-        isCompleted: existing.isCompleted,
-      };
-    }
-
-    return {
-      subTaskId: item._id,
-      subTaskName: item.taskName,
-      isCompleted: false,
-    };
-  });
-};
-
-const buildReviewPayloadFromAddTask = (addTaskDoc: AddTaskForReview) => {
-  const monthYear = addTaskDoc.currentMonthAndYear;
-  const dailySubTasks = buildSubTasksFromPlan(addTaskDoc.DailyTasks);
-  const weeklySubTasks = buildSubTasksFromPlan(addTaskDoc.WeeklyTasks);
-  const monthlySubTasks = buildSubTasksFromPlan(addTaskDoc.MonthlyTasks);
-
-  return {
-    userId: addTaskDoc.userId,
-    TaskId: addTaskDoc._id,
-    DailyTasks: getAllDaysInMonth(monthYear).map((todayDate) => ({
-      todayDate,
-      Task: dailySubTasks,
-    })),
-    WeeklyTasks: getAllSundaysInMonth(monthYear).map((sundayDate) => ({
-      sundayDate,
-      Task: weeklySubTasks,
-    })),
-    MonthlyTasks: {
-      monthEndDate: getLastDayOfMonth(monthYear),
-      Task: monthlySubTasks,
-    },
-  };
-};
+export type { AddTaskForReview, DatedTaskEntry } from "../helper/review-sync.helper";
 
 const createReviewTaskFromAddTask = async (
   addTaskDoc: AddTaskForReview,
@@ -105,66 +23,6 @@ const createReviewTaskFromAddTask = async (
   const payload = buildReviewPayloadFromAddTask(addTaskDoc);
   const [review] = await ReviewTask.create([payload], session ? { session } : {});
   return review;
-};
-
-const dateKey = (d: Date): string =>
-  `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-
-const toReviewSubTasks = (
-  tasks: { subTaskId: Types.ObjectId; subTaskName: string; isCompleted: boolean }[],
-): ReviewSubTask[] =>
-  tasks.map((t) => ({
-    subTaskId: t.subTaskId,
-    subTaskName: t.subTaskName,
-    isCompleted: t.isCompleted,
-  }));
-
-const buildSyncedReviewUpdate = (
-  addTaskDoc: AddTaskForReview,
-  existing: {
-    DailyTasks: { todayDate: Date; Task: ReviewSubTask[] }[];
-    WeeklyTasks: { sundayDate: Date; Task: ReviewSubTask[] }[];
-    MonthlyTasks: { monthEndDate: Date; Task: ReviewSubTask[] };
-  },
-) => {
-  const monthYear = addTaskDoc.currentMonthAndYear;
-
-  const existingDailyByDate = new Map(
-    existing.DailyTasks.map((entry) => [dateKey(entry.todayDate), entry]),
-  );
-  const existingWeeklyByDate = new Map(
-    existing.WeeklyTasks.map((entry) => [dateKey(entry.sundayDate), entry]),
-  );
-
-  return {
-    DailyTasks: getAllDaysInMonth(monthYear).map((todayDate) => {
-      const prev = existingDailyByDate.get(dateKey(todayDate));
-      return {
-        todayDate,
-        Task: mergeSubTasksWithExisting(
-          addTaskDoc.DailyTasks,
-          prev ? toReviewSubTasks(prev.Task) : [],
-        ),
-      };
-    }),
-    WeeklyTasks: getAllSundaysInMonth(monthYear).map((sundayDate) => {
-      const prev = existingWeeklyByDate.get(dateKey(sundayDate));
-      return {
-        sundayDate,
-        Task: mergeSubTasksWithExisting(
-          addTaskDoc.WeeklyTasks,
-          prev ? toReviewSubTasks(prev.Task) : [],
-        ),
-      };
-    }),
-    MonthlyTasks: {
-      monthEndDate: getLastDayOfMonth(monthYear),
-      Task: mergeSubTasksWithExisting(
-        addTaskDoc.MonthlyTasks,
-        toReviewSubTasks(existing.MonthlyTasks.Task),
-      ),
-    },
-  };
 };
 
 const syncReviewTaskFromAddTask = async (
@@ -280,9 +138,33 @@ const PatchReviewTaskCompletionService = async (
     throw new Error("Review task not found");
   }
 
+  const addTask = await AddTask.findOne({ _id: review.TaskId, userId });
+  const datedSubTaskDates = buildDatedSubTaskIdMap(
+    addTask?.DatedTasks as { date: string; tasks?: { _id?: Types.ObjectId }[] }[] | undefined,
+  );
+
   let updated = false;
 
   if (type === "daily") {
+    const scheduledDatedDate = datedSubTaskDates.get(subTaskId);
+    if (scheduledDatedDate) {
+      const targetYmd = formatDateYmd(targetDate);
+      const todayYmd = formatDateYmd(new Date());
+      if (targetYmd !== scheduledDatedDate) {
+        throw new Error("Daily extras can only be updated on their scheduled date");
+      }
+      if (targetYmd !== todayYmd) {
+        throw new Error("Daily extras can only be updated for today");
+      }
+      const monthYear = addTask?.currentMonthAndYear;
+      if (
+        !monthYear ||
+        !isAllowedDatedTaskDate(scheduledDatedDate, monthYear)
+      ) {
+        throw new Error("Cannot update completion for this date");
+      }
+    }
+
     for (const entry of review.DailyTasks) {
       if (!isSameCalendarDay(entry.todayDate, targetDate)) continue;
       for (const task of entry.Task) {

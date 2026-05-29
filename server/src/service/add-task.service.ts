@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { AddTask } from "../model/add-task.model";
+import { normalizeDatedTasks } from "../helper/dated-tasks.helper";
 import {
   createReviewTaskFromAddTask,
   syncReviewTaskFromAddTask,
@@ -7,20 +8,32 @@ import {
   AddTaskForReview,
 } from "./review-task.service";
 
+type TaskNameDoc = { _id: mongoose.Types.ObjectId; taskName: string };
+
+type DatedTaskDoc = { date: string; tasks: TaskNameDoc[] };
+
+const mapPlanItems = (items: TaskNameDoc[]) =>
+  items.map((t) => ({ _id: t._id, taskName: t.taskName }));
+
 const toAddTaskForReview = (doc: {
-  _id: import("mongoose").Types.ObjectId;
-  userId: import("mongoose").Types.ObjectId;
+  _id: mongoose.Types.ObjectId;
+  userId: mongoose.Types.ObjectId;
   currentMonthAndYear: string;
-  DailyTasks: { _id: import("mongoose").Types.ObjectId; taskName: string }[];
-  WeeklyTasks: { _id: import("mongoose").Types.ObjectId; taskName: string }[];
-  MonthlyTasks: { _id: import("mongoose").Types.ObjectId; taskName: string }[];
+  DailyTasks: TaskNameDoc[];
+  WeeklyTasks: TaskNameDoc[];
+  MonthlyTasks: TaskNameDoc[];
+  DatedTasks?: DatedTaskDoc[];
 }): AddTaskForReview => ({
   _id: doc._id,
   userId: doc.userId,
   currentMonthAndYear: doc.currentMonthAndYear,
-  DailyTasks: doc.DailyTasks.map((t) => ({ _id: t._id, taskName: t.taskName })),
-  WeeklyTasks: doc.WeeklyTasks.map((t) => ({ _id: t._id, taskName: t.taskName })),
-  MonthlyTasks: doc.MonthlyTasks.map((t) => ({ _id: t._id, taskName: t.taskName })),
+  DailyTasks: mapPlanItems(doc.DailyTasks),
+  WeeklyTasks: mapPlanItems(doc.WeeklyTasks),
+  MonthlyTasks: mapPlanItems(doc.MonthlyTasks),
+  DatedTasks: (doc.DatedTasks ?? []).map((entry) => ({
+    date: entry.date,
+    tasks: mapPlanItems(entry.tasks ?? []),
+  })),
 });
 
 const formatCurrentMonthAndYear = (d: Date): string => {
@@ -62,6 +75,8 @@ const runWithTransaction = async <T>(
 const CreateTaskService = async (data: any, userId: string): Promise<any> => {
   try {
     const { DailyTasks, WeeklyTasks, MonthlyTasks } = data;
+    const monthYear = formatCurrentMonthAndYear(new Date());
+    const DatedTasks = normalizeDatedTasks(data.DatedTasks, monthYear);
 
     return await runWithTransaction(async (session) => {
       const created = await AddTask.create(
@@ -69,10 +84,11 @@ const CreateTaskService = async (data: any, userId: string): Promise<any> => {
           {
             userId,
             createdBy: userId,
-            currentMonthAndYear: formatCurrentMonthAndYear(new Date()),
+            currentMonthAndYear: monthYear,
             DailyTasks,
             WeeklyTasks,
             MonthlyTasks,
+            DatedTasks,
           },
         ],
         session ? { session } : {},
@@ -152,10 +168,16 @@ const UpdateTaskService = async (id: string, data: any, userId: string): Promise
   try {
     const { DailyTasks, WeeklyTasks, MonthlyTasks } = data;
 
+    const existing = await AddTask.findOne({ _id: id, userId });
+    if (!existing) {
+      throw new Error("Task not found");
+    }
+    const DatedTasks = normalizeDatedTasks(data.DatedTasks, existing.currentMonthAndYear);
+
     return await runWithTransaction(async (session) => {
       const updated = await AddTask.findOneAndUpdate(
         { _id: id, userId },
-        { DailyTasks, WeeklyTasks, MonthlyTasks },
+        { DailyTasks, WeeklyTasks, MonthlyTasks, DatedTasks },
         { new: true, runValidators: true, ...(session ? { session } : {}) },
       );
       if (!updated) {

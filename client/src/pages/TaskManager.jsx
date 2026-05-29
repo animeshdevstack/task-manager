@@ -6,6 +6,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Copy,
   Lock,
   Pencil,
   Plus,
@@ -14,6 +15,7 @@ import {
   Unlock,
 } from 'lucide-react'
 import AppPageHeader from '@/components/layout/AppPageHeader'
+import DatedDatePicker from '@/components/tasks/DatedDatePicker'
 import { Button } from '@/components/ui/button'
 import { Toast, TOAST_DURATION_MS } from '@/components/ui/toast'
 import {
@@ -35,6 +37,14 @@ const MOBILE_MAX_WIDTH_PX = 767
 /** Scrollable task list (height comes from grid row minmax(0, 1fr)). */
 const TASK_LIST_SCROLL_CLASS =
   'min-h-0 w-full min-w-0 overflow-y-auto overflow-x-hidden overscroll-y-contain scroll-smooth [scrollbar-gutter:stable]'
+
+/** Inset focus ring + hover border so inputs do not overlap neighbors. */
+const TASK_INPUT_CLASS =
+  'min-w-0 rounded-md border-white/80 bg-white/90 text-base transition-colors hover:border-violet-300/80 focus-visible:border-violet-400 focus-visible:ring-2 focus-visible:ring-violet-400/30 focus-visible:ring-inset focus-visible:ring-offset-0 dark:border-slate-700 dark:bg-slate-900/90 dark:hover:border-violet-600/60 md:text-sm'
+
+const TASK_ADD_INPUT_CLASS = cn(TASK_INPUT_CLASS, 'h-9 flex-1 md:h-8')
+
+const TASK_EDIT_INPUT_CLASS = cn(TASK_INPUT_CLASS, 'h-9 flex-1 md:h-8')
 
 function useTasksPerPage() {
   const [perPage, setPerPage] = useState(() => {
@@ -58,8 +68,8 @@ function useTasksPerPage() {
 
 const TASK_MANAGER_TAB_KEY = 'task-manager-active-tab'
 const TASK_MANAGER_PAGE_KEY = 'task-manager-list-pages'
-const VALID_TASK_TABS = new Set(['daily', 'weekly', 'monthly'])
-const DEFAULT_LIST_PAGE = { daily: 1, weekly: 1, monthly: 1 }
+const VALID_TASK_TABS = new Set(['daily', 'weekly', 'monthly', 'dated'])
+const DEFAULT_LIST_PAGE = { daily: 1, weekly: 1, monthly: 1, dated: 1 }
 
 function getStoredTaskTab() {
   try {
@@ -94,7 +104,7 @@ function getStoredListPages() {
     if (!raw) return { ...DEFAULT_LIST_PAGE }
     const parsed = JSON.parse(raw)
     const out = { ...DEFAULT_LIST_PAGE }
-    for (const key of ['daily', 'weekly', 'monthly']) {
+    for (const key of ['daily', 'weekly', 'monthly', 'dated']) {
       const n = Number(parsed?.[key])
       if (Number.isFinite(n) && n >= 1) out[key] = Math.floor(n)
     }
@@ -299,7 +309,91 @@ const TASK_SECTIONS = [
     bg: 'bg-indigo-50/80 dark:bg-indigo-950/30',
     listBorder: 'border-indigo-200/80',
   },
+  {
+    key: 'dated',
+    title: 'Daily extras',
+    description: 'Extra tasks for a chosen day · not copied from previous months',
+    accent: 'from-sky-500 to-blue-500',
+    ring: 'ring-sky-400/40',
+    bg: 'bg-sky-50/80 dark:bg-sky-950/30',
+    listBorder: 'border-sky-200/80',
+  },
 ]
+
+function formatDateYmd(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function monthDateBounds(monthKey) {
+  const [year, monthNum] = monthKey.split('-').map(Number)
+  const lastDay = new Date(year, monthNum, 0).getDate()
+  return {
+    min: `${monthKey}-01`,
+    max: `${monthKey}-${String(lastDay).padStart(2, '0')}`,
+  }
+}
+
+function editableDateBounds(monthKey, referenceDate) {
+  const { min: monthStart, max } = monthDateBounds(monthKey)
+  const todayStr = formatDateYmd(referenceDate)
+  const min = todayStr >= monthStart && todayStr <= max ? todayStr : monthStart
+  return { min, max }
+}
+
+function isAllowedDatedTaskDate(dateStr, monthKey, referenceDate) {
+  const { min, max } = editableDateBounds(monthKey, referenceDate)
+  return dateStr >= min && dateStr <= max
+}
+
+function defaultSelectedDate(monthKey, referenceDate) {
+  return editableDateBounds(monthKey, referenceDate).min
+}
+
+function shiftDateYmd(ymd, deltaDays) {
+  const [y, m, d] = ymd.split('-').map(Number)
+  return formatDateYmd(new Date(y, m - 1, d + deltaDays))
+}
+
+function fromDocDatedTasks(arr) {
+  if (!Array.isArray(arr)) return []
+  return arr
+    .map((entry) => {
+      const date = typeof entry?.date === 'string' ? entry.date.trim() : ''
+      if (!date) return null
+      return { date, tasks: fromDocTasks(entry.tasks) }
+    })
+    .filter(Boolean)
+}
+
+function toDatedTasksPayload(datedGroups) {
+  if (!Array.isArray(datedGroups)) return []
+  return datedGroups
+    .map((group) => ({
+      date: group.date,
+      tasks: toTaskPayload(group.tasks),
+    }))
+    .filter((group) => group.tasks.length > 0)
+}
+
+function getSelectedDateTasks(datedGroups, selectedDate) {
+  const hit = datedGroups.find((g) => g.date === selectedDate)
+  return hit?.tasks ?? []
+}
+
+function upsertSelectedDateTasks(datedGroups, selectedDate, tasks) {
+  const rest = datedGroups.filter((g) => g.date !== selectedDate)
+  if (!tasks.length) return rest
+  return [...rest, { date: selectedDate, tasks }].sort((a, b) =>
+    a.date.localeCompare(b.date),
+  )
+}
+
+function countDatedTasks(datedGroups) {
+  return (datedGroups ?? []).reduce((sum, g) => sum + (g.tasks?.length ?? 0), 0)
+}
 
 function formatYearMonth(d) {
   const y = d.getFullYear()
@@ -309,6 +403,30 @@ function formatYearMonth(d) {
 
 function formatMonthTitle(d) {
   return d.toLocaleString(undefined, { month: 'long', year: 'numeric' })
+}
+
+const CLONEABLE_SECTIONS = ['daily', 'weekly', 'monthly']
+
+const CLONE_SECTION_LABELS = {
+  daily: 'daily',
+  weekly: 'weekly',
+  monthly: 'monthly',
+}
+
+const PREV_PLAN_TASK_FIELDS = {
+  daily: 'DailyTasks',
+  weekly: 'WeeklyTasks',
+  monthly: 'MonthlyTasks',
+}
+
+function previousMonthKey(monthKey) {
+  const [year, monthNum] = monthKey.split('-').map(Number)
+  return formatYearMonth(new Date(year, monthNum - 2, 1))
+}
+
+function previousMonthTitle(monthKey) {
+  const [year, monthNum] = monthKey.split('-').map(Number)
+  return formatMonthTitle(new Date(year, monthNum - 2, 1))
 }
 
 function toTaskPayload(items) {
@@ -342,6 +460,13 @@ function fromDocTasks(arr) {
     .filter(Boolean)
 }
 
+function clonePlanTasks(arr) {
+  return fromDocTasks(arr).map(({ taskName, isPrivate }) => ({
+    taskName,
+    isPrivate,
+  }))
+}
+
 function totalPages(count, perPage) {
   return Math.max(1, Math.ceil(count / perPage))
 }
@@ -352,6 +477,7 @@ export default function TaskManager() {
   const [user] = useState(getStoredUser)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [cloning, setCloning] = useState(false)
   const [toast, setToast] = useState(null)
   const [editing, setEditing] = useState(null)
 
@@ -368,14 +494,20 @@ export default function TaskManager() {
   const today = useMemo(() => new Date(), [])
   const monthKey = useMemo(() => formatYearMonth(today), [today])
   const monthTitle = useMemo(() => formatMonthTitle(today), [today])
+  const prevMonthTitle = useMemo(() => previousMonthTitle(monthKey), [monthKey])
 
   const [existingId, setExistingId] = useState(null)
   const [dailyTasks, setDailyTasks] = useState([])
   const [weeklyTasks, setWeeklyTasks] = useState([])
   const [monthlyTasks, setMonthlyTasks] = useState([])
+  const [datedTasks, setDatedTasks] = useState([])
+  const [selectedDate, setSelectedDate] = useState(() =>
+    defaultSelectedDate(formatYearMonth(new Date()), new Date()),
+  )
   const [dailyDraft, setDailyDraft] = useState('')
   const [weeklyDraft, setWeeklyDraft] = useState('')
   const [monthlyDraft, setMonthlyDraft] = useState('')
+  const [datedDraft, setDatedDraft] = useState('')
   const [listPage, setListPage] = useState(getStoredListPages)
   const [activeTab, setActiveTab] = useState(getStoredTaskTab)
 
@@ -395,13 +527,37 @@ export default function TaskManager() {
     }
   }, [listPage])
 
+  const editableBounds = useMemo(
+    () => editableDateBounds(monthKey, today),
+    [monthKey, today],
+  )
+
+  useEffect(() => {
+    setSelectedDate((prev) => {
+      if (prev >= editableBounds.min && prev <= editableBounds.max) return prev
+      return editableBounds.min
+    })
+  }, [editableBounds.min, editableBounds.max])
+
+  const selectedDateTaskCount = useMemo(
+    () => getSelectedDateTasks(datedTasks, selectedDate).length,
+    [datedTasks, selectedDate],
+  )
+
   useEffect(() => {
     setListPage((prev) => ({
       daily: Math.min(prev.daily, totalPages(dailyTasks.length, tasksPerPage)),
       weekly: Math.min(prev.weekly, totalPages(weeklyTasks.length, tasksPerPage)),
       monthly: Math.min(prev.monthly, totalPages(monthlyTasks.length, tasksPerPage)),
+      dated: Math.min(prev.dated, totalPages(selectedDateTaskCount, tasksPerPage)),
     }))
-  }, [tasksPerPage, dailyTasks.length, weeklyTasks.length, monthlyTasks.length])
+  }, [
+    tasksPerPage,
+    dailyTasks.length,
+    weeklyTasks.length,
+    monthlyTasks.length,
+    selectedDateTaskCount,
+  ])
 
   function goToPage(section, nextPage) {
     const { tasks } = getSectionState(section)
@@ -427,22 +583,29 @@ export default function TaskManager() {
           setDailyTasks(fromDocTasks(hit.DailyTasks))
           setWeeklyTasks(fromDocTasks(hit.WeeklyTasks))
           setMonthlyTasks(fromDocTasks(hit.MonthlyTasks))
+          setDatedTasks(fromDocDatedTasks(hit.DatedTasks))
           const counts = {
             daily: fromDocTasks(hit.DailyTasks).length,
             weekly: fromDocTasks(hit.WeeklyTasks).length,
             monthly: fromDocTasks(hit.MonthlyTasks).length,
+            dated: getSelectedDateTasks(
+              fromDocDatedTasks(hit.DatedTasks),
+              selectedDate,
+            ).length,
           }
           setListPage((prev) => ({
             daily: Math.min(prev.daily, totalPages(counts.daily, tasksPerPage)),
             weekly: Math.min(prev.weekly, totalPages(counts.weekly, tasksPerPage)),
             monthly: Math.min(prev.monthly, totalPages(counts.monthly, tasksPerPage)),
+            dated: Math.min(prev.dated, totalPages(counts.dated, tasksPerPage)),
           }))
         } else {
           setExistingId(null)
           setDailyTasks([])
           setWeeklyTasks([])
           setMonthlyTasks([])
-          setListPage({ daily: 1, weekly: 1, monthly: 1 })
+          setDatedTasks([])
+          setListPage({ daily: 1, weekly: 1, monthly: 1, dated: 1 })
         }
       } catch (e) {
         if (!cancelled) {
@@ -472,17 +635,21 @@ export default function TaskManager() {
       setDailyTasks(fromDocTasks(hit.DailyTasks))
       setWeeklyTasks(fromDocTasks(hit.WeeklyTasks))
       setMonthlyTasks(fromDocTasks(hit.MonthlyTasks))
+      setDatedTasks(fromDocDatedTasks(hit.DatedTasks))
     } else {
       setExistingId(null)
       setDailyTasks([])
       setWeeklyTasks([])
       setMonthlyTasks([])
+      setDatedTasks([])
     }
 
+    const datedFromHit = hit?._id ? fromDocDatedTasks(hit.DatedTasks) : []
     const counts = {
       daily: hit?._id ? fromDocTasks(hit.DailyTasks).length : 0,
       weekly: hit?._id ? fromDocTasks(hit.WeeklyTasks).length : 0,
       monthly: hit?._id ? fromDocTasks(hit.MonthlyTasks).length : 0,
+      dated: getSelectedDateTasks(datedFromHit, selectedDate).length,
     }
 
     setListPage((prev) => ({
@@ -498,6 +665,10 @@ export default function TaskManager() {
         lastPageSection === 'monthly'
           ? totalPages(counts.monthly, tasksPerPage)
           : Math.min(prev.monthly, totalPages(counts.monthly, tasksPerPage)),
+      dated:
+        lastPageSection === 'dated'
+          ? totalPages(counts.dated, tasksPerPage)
+          : Math.min(prev.dated, totalPages(counts.dated, tasksPerPage)),
     }))
   }
 
@@ -514,6 +685,7 @@ export default function TaskManager() {
       DailyTasks: toTaskPayload(lists.daily),
       WeeklyTasks: toTaskPayload(lists.weekly),
       MonthlyTasks: toTaskPayload(lists.monthly),
+      DatedTasks: toDatedTasksPayload(lists.dated),
     }
   }
 
@@ -521,7 +693,8 @@ export default function TaskManager() {
     return (
       body.DailyTasks.length === 0 &&
       body.WeeklyTasks.length === 0 &&
-      body.MonthlyTasks.length === 0
+      body.MonthlyTasks.length === 0 &&
+      (body.DatedTasks?.length ?? 0) === 0
     )
   }
 
@@ -567,22 +740,46 @@ export default function TaskManager() {
         setDraft: setWeeklyDraft,
       }
     }
+    if (section === 'monthly') {
+      return {
+        tasks: monthlyTasks,
+        setTasks: setMonthlyTasks,
+        draft: monthlyDraft,
+        setDraft: setMonthlyDraft,
+      }
+    }
+    const tasks = getSelectedDateTasks(datedTasks, selectedDate)
     return {
-      tasks: monthlyTasks,
-      setTasks: setMonthlyTasks,
-      draft: monthlyDraft,
-      setDraft: setMonthlyDraft,
+      tasks,
+      setTasks: (next) => setDatedTasks(upsertSelectedDateTasks(datedTasks, selectedDate, next)),
+      draft: datedDraft,
+      setDraft: setDatedDraft,
     }
   }
 
   function currentLists() {
-    return { daily: dailyTasks, weekly: weeklyTasks, monthly: monthlyTasks }
+    return { daily: dailyTasks, weekly: weeklyTasks, monthly: monthlyTasks, dated: datedTasks }
+  }
+
+  function listsWithSectionUpdate(section, nextTasks) {
+    if (section === 'dated') {
+      return {
+        ...currentLists(),
+        dated: upsertSelectedDateTasks(datedTasks, selectedDate, nextTasks),
+      }
+    }
+    return { ...currentLists(), [section]: nextTasks }
   }
 
   async function onAdd(section) {
     const { tasks, setTasks, draft, setDraft } = getSectionState(section)
     const name = draft.trim()
     if (!name) return
+
+    if (section === 'dated' && !isAllowedDatedTaskDate(selectedDate, monthKey, today)) {
+      showToast('Choose today or a future date in this month', 'error')
+      return
+    }
 
     const next = [...tasks, { taskName: name, isPrivate: false }]
     setTasks(next)
@@ -593,7 +790,7 @@ export default function TaskManager() {
     }))
 
     try {
-      await persistLists({ ...currentLists(), [section]: next }, { lastPageSection: section })
+      await persistLists(listsWithSectionUpdate(section, next), { lastPageSection: section })
       showToast('Task added', 'success')
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Could not save', 'error')
@@ -612,18 +809,19 @@ export default function TaskManager() {
     setEditing((e) => (e?.section === section && e?.index === index ? null : e))
 
     if (!existingId && next.length === 0) {
-      const lists = { ...currentLists(), [section]: next }
+      const lists = listsWithSectionUpdate(section, next)
       if (
         lists.daily.length === 0 &&
         lists.weekly.length === 0 &&
-        lists.monthly.length === 0
+        lists.monthly.length === 0 &&
+        countDatedTasks(lists.dated) === 0
       ) {
         return
       }
     }
 
     try {
-      await persistLists({ ...currentLists(), [section]: next })
+      await persistLists(listsWithSectionUpdate(section, next))
       showToast('Task removed', 'remove')
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Could not save', 'error')
@@ -639,7 +837,7 @@ export default function TaskManager() {
     setTasks(next)
 
     try {
-      await persistLists({ ...currentLists(), [section]: next })
+      await persistLists(listsWithSectionUpdate(section, next))
       showToast(
         next[index]?.isPrivate ? 'Task marked private' : 'Task visible to followers',
         'info',
@@ -668,7 +866,7 @@ export default function TaskManager() {
     setEditing(null)
 
     try {
-      await persistLists({ ...currentLists(), [section]: next })
+      await persistLists(listsWithSectionUpdate(section, next))
       showToast('Task updated', 'warning')
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Could not save', 'error')
@@ -690,9 +888,101 @@ export default function TaskManager() {
     }
   }
 
+  async function cloneFromPreviousMonth(sections = CLONEABLE_SECTIONS) {
+    setCloning(true)
+    try {
+      const res = await tasksRequest('/get-tasks?page=1&limit=50')
+      const list = res.data?.tasks ?? []
+      const prevHit = list.find((t) => t.currentMonthAndYear === previousMonthKey(monthKey))
+
+      if (!prevHit) {
+        showToast(`No plan found for ${prevMonthTitle}.`, 'error')
+        return
+      }
+
+      const currentBySection = {
+        daily: dailyTasks,
+        weekly: weeklyTasks,
+        monthly: monthlyTasks,
+      }
+      const copied = []
+      const skipped = []
+      const emptySource = []
+      const nextLists = currentLists()
+
+      for (const section of sections) {
+        if (!CLONEABLE_SECTIONS.includes(section)) continue
+
+        const currentTasks = currentBySection[section]
+        const field = PREV_PLAN_TASK_FIELDS[section]
+        const prevTasks = clonePlanTasks(prevHit[field] ?? [])
+
+        if (currentTasks.length > 0) {
+          skipped.push(CLONE_SECTION_LABELS[section])
+          continue
+        }
+        if (prevTasks.length === 0) {
+          emptySource.push(CLONE_SECTION_LABELS[section])
+          continue
+        }
+
+        nextLists[section] = prevTasks
+        copied.push(CLONE_SECTION_LABELS[section])
+      }
+
+      if (copied.length === 0) {
+        const parts = []
+        if (skipped.length > 0) {
+          parts.push(`${skipped.join(', ')} already have tasks — skipped`)
+        }
+        if (emptySource.length > 0) {
+          parts.push(`no ${emptySource.join(', ')} tasks in ${prevMonthTitle}`)
+        }
+        showToast(parts.length > 0 ? `${parts.join('; ')}.` : 'Nothing to copy.', 'info')
+        return
+      }
+
+      if (copied.includes('daily')) setDailyTasks(nextLists.daily)
+      if (copied.includes('weekly')) setWeeklyTasks(nextLists.weekly)
+      if (copied.includes('monthly')) setMonthlyTasks(nextLists.monthly)
+
+      setListPage((p) => ({
+        ...p,
+        ...(copied.includes('daily') && {
+          daily: totalPages(nextLists.daily.length, tasksPerPage),
+        }),
+        ...(copied.includes('weekly') && {
+          weekly: totalPages(nextLists.weekly.length, tasksPerPage),
+        }),
+        ...(copied.includes('monthly') && {
+          monthly: totalPages(nextLists.monthly.length, tasksPerPage),
+        }),
+      }))
+
+      await persistLists(nextLists)
+
+      let msg = `Copied ${copied.join(', ')} tasks from ${prevMonthTitle}.`
+      if (skipped.length > 0) {
+        const skippedLabel = skipped
+          .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+          .join(', ')
+        msg += ` ${skippedLabel} already had tasks — skipped.`
+      }
+      showToast(msg, 'success')
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Could not copy from last month', 'error')
+      await refetchMonthPlan()
+    } finally {
+      setCloning(false)
+    }
+  }
+
   const tabMeta = TASK_SECTIONS.find((t) => t.key === activeTab) ?? TASK_SECTIONS[0]
   const totalTaskCount =
-    dailyTasks.length + weeklyTasks.length + monthlyTasks.length
+    dailyTasks.length +
+    weeklyTasks.length +
+    monthlyTasks.length +
+    countDatedTasks(datedTasks)
 
   function renderSectionCard(s, cardClassName) {
     const { tasks, draft, setDraft } = getSectionState(s.key)
@@ -716,24 +1006,68 @@ export default function TaskManager() {
             s.accent,
           )}
         >
-          <CardTitle className="text-base leading-tight">{s.title}</CardTitle>
-          <CardDescription className="text-xs leading-tight text-white/90">
-            {s.description}
-          </CardDescription>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <CardTitle className="text-base leading-tight">{s.title}</CardTitle>
+              <CardDescription className="text-xs leading-tight text-white/90">
+                {s.description}
+              </CardDescription>
+            </div>
+            {CLONEABLE_SECTIONS.includes(s.key) ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 shrink-0 gap-1 border-white/40 bg-white/15 px-2 text-[10px] text-white hover:bg-white/25 hover:text-white"
+                disabled={loading || saving || cloning}
+                title={`Copy ${s.title.toLowerCase()} from ${prevMonthTitle} (only if empty)`}
+                onClick={() => void cloneFromPreviousMonth([s.key])}
+              >
+                <Copy className="h-3 w-3" aria-hidden />
+                <span className="hidden sm:inline">Copy from last month</span>
+              </Button>
+            ) : null}
+          </div>
         </CardHeader>
         <CardContent
           className={cn(
-            'grid min-h-0 w-full min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] gap-2 overflow-hidden p-2.5 pb-3 pt-0',
+            'grid min-h-0 w-full min-w-0 flex-1 gap-2.5 overflow-hidden p-2.5 pb-3 pt-1.5',
+            s.key === 'dated'
+              ? 'grid-rows-[auto_auto_minmax(0,1fr)_auto]'
+              : 'grid-rows-[auto_minmax(0,1fr)_auto]',
             s.bg,
           )}
         >
-          <div className="flex gap-1">
+          {s.key === 'dated' ? (
+            <DatedDatePicker
+              id="dated-task-date"
+              value={selectedDate}
+              min={editableBounds.min}
+              max={editableBounds.max}
+              disabled={loading || saving || cloning}
+              prevDisabled={selectedDate <= editableBounds.min}
+              nextDisabled={selectedDate >= editableBounds.max}
+              onPrev={() => setSelectedDate(shiftDateYmd(selectedDate, -1))}
+              onNext={() => setSelectedDate(shiftDateYmd(selectedDate, 1))}
+              onChange={(e) => {
+                const value = e.target.value
+                if (!value) return
+                if (!isAllowedDatedTaskDate(value, monthKey, today)) {
+                  showToast('Choose today or a future date in this month', 'error')
+                  return
+                }
+                setSelectedDate(value)
+                setListPage((p) => ({ ...p, dated: 1 }))
+              }}
+            />
+          ) : null}
+          <div className="flex items-center gap-1.5">
             <Input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder="Add a task…"
-              disabled={loading || saving}
-              className="h-9 flex-1 border-white/80 bg-white/90 text-base md:h-8 md:text-sm"
+              placeholder={s.key === 'dated' ? 'Add a daily extra…' : 'Add a task…'}
+              disabled={loading || saving || cloning}
+              className={TASK_ADD_INPUT_CLASS}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault()
@@ -744,8 +1078,8 @@ export default function TaskManager() {
             <Button
               type="button"
               size="sm"
-              className="h-8 shrink-0 px-2"
-              disabled={loading || saving || !draft.trim()}
+              className="h-9 shrink-0 px-2 md:h-8"
+              disabled={loading || saving || cloning || !draft.trim()}
               onClick={() => void onAdd(s.key)}
             >
               <Plus className="h-4 w-4" />
@@ -762,7 +1096,19 @@ export default function TaskManager() {
             {loading ? (
               <li className="py-6 text-center text-xs text-slate-500">Loading…</li>
             ) : pageTasks.length === 0 ? (
-              <li className="py-6 text-center text-xs text-slate-500">No tasks yet</li>
+              <li className="px-2 py-6 text-center text-xs leading-relaxed text-slate-500">
+                {s.key === 'dated' ? (
+                  'No tasks yet'
+                ) : (
+                  <>
+                    No tasks yet. Use{' '}
+                    <span className="font-semibold text-slate-600 dark:text-slate-400">
+                      Copy from last month
+                    </span>{' '}
+                    above, or add one below.
+                  </>
+                )}
+              </li>
             ) : (
               pageTasks.map((task, i) => {
                 const index = start + i
@@ -777,7 +1123,7 @@ export default function TaskManager() {
                       <Input
                         autoFocus
                         defaultValue={task.taskName}
-                        className="h-9 flex-1 text-base md:h-8 md:text-sm"
+                        className={TASK_EDIT_INPUT_CLASS}
                         disabled={saving}
                         onBlur={(e) => void onSaveEdit(s.key, index, e.target.value)}
                         onKeyDown={(e) => {
@@ -859,7 +1205,7 @@ export default function TaskManager() {
             tasks={tasks}
             page={page}
             pages={pages}
-            disabled={loading || saving}
+            disabled={loading || saving || cloning}
             onPageChange={(next) => goToPage(s.key, next)}
           />
         </CardContent>
@@ -899,6 +1245,18 @@ export default function TaskManager() {
                 </div>
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 border-fuchsia-200/80 bg-white/80 px-2 text-[10px] font-medium text-fuchsia-900 hover:bg-fuchsia-50 dark:border-fuchsia-800 dark:bg-slate-900/80 dark:text-fuchsia-100"
+                  disabled={loading || saving || cloning}
+                  title={`Copy daily, weekly, and monthly tasks from ${prevMonthTitle} (empty sections only)`}
+                  onClick={() => void cloneFromPreviousMonth()}
+                >
+                  <Copy className="h-3 w-3" aria-hidden />
+                  Copy from last month
+                </Button>
                 <span className="rounded-md bg-violet-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-violet-900 dark:bg-violet-950 dark:text-violet-100">
                   {monthKey}
                 </span>
@@ -910,17 +1268,17 @@ export default function TaskManager() {
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col gap-2 pb-2 pt-1 md:pt-2">
-            <div className="flex shrink-0 gap-1 rounded-lg bg-white/70 p-1 shadow-sm ring-1 ring-violet-200/60 dark:bg-slate-900/50">
+            <div className="flex shrink-0 gap-1.5 rounded-lg bg-white/70 p-1.5 shadow-sm ring-1 ring-violet-200/60 dark:bg-slate-900/50">
               {TASK_SECTIONS.map((tab) => (
                 <button
                   key={tab.key}
                   type="button"
                   onClick={() => setActiveTab(tab.key)}
                   className={cn(
-                    'flex-1 rounded-md px-2 py-1.5 text-xs font-semibold transition sm:text-sm',
+                    'flex-1 min-w-0 rounded-md px-2 py-2 text-xs font-semibold transition-colors sm:text-sm',
                     activeTab === tab.key
-                      ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-sm'
-                      : 'text-violet-900/70 hover:bg-violet-50 dark:text-violet-100/80',
+                      ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white'
+                      : 'text-violet-900/70 hover:bg-violet-100/90 dark:text-violet-100/80 dark:hover:bg-violet-900/50',
                   )}
                 >
                   {tab.title.replace(' tasks', '')}
@@ -937,12 +1295,12 @@ export default function TaskManager() {
             <p className="min-w-0 flex-1 text-left text-[11px] leading-snug text-violet-900/70">
               {existingId
                 ? `You already have a plan for ${monthTitle}. Trash deletes a task immediately; pencil edits save on blur.`
-                : `No plan for ${monthTitle} yet. Add tasks and click Update this month to save.`}
+                : `No plan for ${monthTitle} yet. Copy from last month, add tasks, or click Update this month to save.`}
             </p>
             <Button
               type="submit"
               size="sm"
-              disabled={loading || saving || totalTaskCount === 0}
+              disabled={loading || saving || cloning || totalTaskCount === 0}
               className="h-9 shrink-0 px-5 text-sm bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-sm hover:from-violet-500 hover:to-fuchsia-500 md:h-8"
             >
               {saving ? 'Saving…' : 'Update this month'}
