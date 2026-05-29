@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import AppPageHeader from '@/components/layout/AppPageHeader'
 import DatedDatePicker from '@/components/tasks/DatedDatePicker'
+import MonthNavBar, { addMonths } from '@/components/tasks/MonthNavBar'
 import { Button } from '@/components/ui/button'
 import { Toast, TOAST_DURATION_MS } from '@/components/ui/toast'
 import {
@@ -352,6 +353,16 @@ function defaultSelectedDate(monthKey, referenceDate) {
   return editableDateBounds(monthKey, referenceDate).min
 }
 
+function defaultViewSelectedDate(monthKey, referenceDate, isViewingCurrentMonth) {
+  if (isViewingCurrentMonth) return defaultSelectedDate(monthKey, referenceDate)
+  return monthDateBounds(monthKey).min
+}
+
+function isDateInViewMonth(dateStr, monthKey) {
+  const { min, max } = monthDateBounds(monthKey)
+  return dateStr >= min && dateStr <= max
+}
+
 function shiftDateYmd(ymd, deltaDays) {
   const [y, m, d] = ymd.split('-').map(Number)
   return formatDateYmd(new Date(y, m - 1, d + deltaDays))
@@ -480,6 +491,10 @@ export default function TaskManager() {
   const [cloning, setCloning] = useState(false)
   const [toast, setToast] = useState(null)
   const [editing, setEditing] = useState(null)
+  const [viewMonth, setViewMonth] = useState(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), 1)
+  })
 
   const showToast = (message, variant = 'success') => {
     setToast({ message, variant })
@@ -492,9 +507,34 @@ export default function TaskManager() {
   }, [toast])
 
   const today = useMemo(() => new Date(), [])
-  const monthKey = useMemo(() => formatYearMonth(today), [today])
-  const monthTitle = useMemo(() => formatMonthTitle(today), [today])
-  const prevMonthTitle = useMemo(() => previousMonthTitle(monthKey), [monthKey])
+  const currentMonthKey = useMemo(() => formatYearMonth(today), [today])
+  const currentMonthTitle = useMemo(() => formatMonthTitle(today), [today])
+  const monthKey = useMemo(() => formatYearMonth(viewMonth), [viewMonth])
+  const monthTitle = useMemo(() => formatMonthTitle(viewMonth), [viewMonth])
+  const isViewingCurrentMonth = monthKey === currentMonthKey
+  const canEdit = isViewingCurrentMonth
+  const prevMonthTitle = useMemo(
+    () => previousMonthTitle(currentMonthKey),
+    [currentMonthKey],
+  )
+  const viewMonthBounds = useMemo(() => monthDateBounds(monthKey), [monthKey])
+  const datedPickerBounds = useMemo(
+    () => (isViewingCurrentMonth ? editableDateBounds(monthKey, today) : viewMonthBounds),
+    [isViewingCurrentMonth, monthKey, today, viewMonthBounds],
+  )
+
+  const goPrevMonth = () => {
+    setViewMonth((m) => addMonths(m, -1))
+  }
+
+  const goNextMonth = () => {
+    if (isViewingCurrentMonth) return
+    setViewMonth((m) => addMonths(m, 1))
+  }
+
+  const goToCurrentMonth = () => {
+    setViewMonth(new Date(today.getFullYear(), today.getMonth(), 1))
+  }
 
   const [existingId, setExistingId] = useState(null)
   const [dailyTasks, setDailyTasks] = useState([])
@@ -527,17 +567,14 @@ export default function TaskManager() {
     }
   }, [listPage])
 
-  const editableBounds = useMemo(
-    () => editableDateBounds(monthKey, today),
-    [monthKey, today],
-  )
-
   useEffect(() => {
     setSelectedDate((prev) => {
-      if (prev >= editableBounds.min && prev <= editableBounds.max) return prev
-      return editableBounds.min
+      const { min, max } = datedPickerBounds
+      if (prev >= min && prev <= max) return prev
+      return defaultViewSelectedDate(monthKey, today, isViewingCurrentMonth)
     })
-  }, [editableBounds.min, editableBounds.max])
+    if (!isViewingCurrentMonth) setEditing(null)
+  }, [monthKey, isViewingCurrentMonth, datedPickerBounds.min, datedPickerBounds.max, today])
 
   const selectedDateTaskCount = useMemo(
     () => getSelectedDateTasks(datedTasks, selectedDate).length,
@@ -699,6 +736,10 @@ export default function TaskManager() {
   }
 
   async function persistLists(lists, options = {}) {
+    if (!canEdit) {
+      throw new Error('Tasks can only be modified for the current month')
+    }
+
     const body = buildPayload(lists)
     if (isPayloadEmpty(body)) {
       throw new Error('Add at least one task somewhere.')
@@ -772,11 +813,15 @@ export default function TaskManager() {
   }
 
   async function onAdd(section) {
+    if (!canEdit) {
+      showToast('Tasks can only be modified for the current month', 'error')
+      return
+    }
     const { tasks, setTasks, draft, setDraft } = getSectionState(section)
     const name = draft.trim()
     if (!name) return
 
-    if (section === 'dated' && !isAllowedDatedTaskDate(selectedDate, monthKey, today)) {
+    if (section === 'dated' && !isAllowedDatedTaskDate(selectedDate, currentMonthKey, today)) {
       showToast('Choose today or a future date in this month', 'error')
       return
     }
@@ -799,6 +844,10 @@ export default function TaskManager() {
   }
 
   async function onRemove(section, index) {
+    if (!canEdit) {
+      showToast('Tasks can only be modified for the current month', 'error')
+      return
+    }
     const { tasks, setTasks } = getSectionState(section)
     const next = tasks.filter((_, i) => i !== index)
     setTasks(next)
@@ -830,6 +879,10 @@ export default function TaskManager() {
   }
 
   async function onTogglePrivate(section, index) {
+    if (!canEdit) {
+      showToast('Tasks can only be modified for the current month', 'error')
+      return
+    }
     const { tasks, setTasks } = getSectionState(section)
     const next = tasks.map((t, i) =>
       i === index ? { ...t, isPrivate: !t.isPrivate } : t,
@@ -849,6 +902,10 @@ export default function TaskManager() {
   }
 
   async function onSaveEdit(section, index, value) {
+    if (!canEdit) {
+      showToast('Tasks can only be modified for the current month', 'error')
+      return
+    }
     const trimmed = value.trim()
     if (!trimmed) {
       showToast('Task name cannot be empty', 'error')
@@ -876,6 +933,10 @@ export default function TaskManager() {
 
   async function onSave(e) {
     e.preventDefault()
+    if (!canEdit) {
+      showToast('Tasks can only be modified for the current month', 'error')
+      return
+    }
     const wasNewPlan = !existingId
     try {
       await persistLists(currentLists())
@@ -889,11 +950,17 @@ export default function TaskManager() {
   }
 
   async function cloneFromPreviousMonth(sections = CLONEABLE_SECTIONS) {
+    if (!canEdit) {
+      showToast('Tasks can only be modified for the current month', 'error')
+      return
+    }
     setCloning(true)
     try {
       const res = await tasksRequest('/get-tasks?page=1&limit=50')
       const list = res.data?.tasks ?? []
-      const prevHit = list.find((t) => t.currentMonthAndYear === previousMonthKey(monthKey))
+      const prevHit = list.find(
+        (t) => t.currentMonthAndYear === previousMonthKey(currentMonthKey),
+      )
 
       if (!prevHit) {
         showToast(`No plan found for ${prevMonthTitle}.`, 'error')
@@ -1013,7 +1080,7 @@ export default function TaskManager() {
                 {s.description}
               </CardDescription>
             </div>
-            {CLONEABLE_SECTIONS.includes(s.key) ? (
+            {CLONEABLE_SECTIONS.includes(s.key) && canEdit ? (
               <Button
                 type="button"
                 variant="outline"
@@ -1033,8 +1100,12 @@ export default function TaskManager() {
           className={cn(
             'grid min-h-0 w-full min-w-0 flex-1 gap-2.5 overflow-hidden p-2.5 pb-3 pt-1.5',
             s.key === 'dated'
-              ? 'grid-rows-[auto_auto_minmax(0,1fr)_auto]'
-              : 'grid-rows-[auto_minmax(0,1fr)_auto]',
+              ? canEdit
+                ? 'grid-rows-[auto_auto_minmax(0,1fr)_auto]'
+                : 'grid-rows-[auto_minmax(0,1fr)_auto]'
+              : canEdit
+                ? 'grid-rows-[auto_minmax(0,1fr)_auto]'
+                : 'grid-rows-[minmax(0,1fr)_auto]',
             s.bg,
           )}
         >
@@ -1042,25 +1113,27 @@ export default function TaskManager() {
             <DatedDatePicker
               id="dated-task-date"
               value={selectedDate}
-              min={editableBounds.min}
-              max={editableBounds.max}
+              min={datedPickerBounds.min}
+              max={datedPickerBounds.max}
               disabled={loading || saving || cloning}
-              prevDisabled={selectedDate <= editableBounds.min}
-              nextDisabled={selectedDate >= editableBounds.max}
+              prevDisabled={selectedDate <= datedPickerBounds.min}
+              nextDisabled={selectedDate >= datedPickerBounds.max}
               onPrev={() => setSelectedDate(shiftDateYmd(selectedDate, -1))}
               onNext={() => setSelectedDate(shiftDateYmd(selectedDate, 1))}
               onChange={(e) => {
                 const value = e.target.value
                 if (!value) return
-                if (!isAllowedDatedTaskDate(value, monthKey, today)) {
+                if (canEdit && !isAllowedDatedTaskDate(value, currentMonthKey, today)) {
                   showToast('Choose today or a future date in this month', 'error')
                   return
                 }
+                if (!canEdit && !isDateInViewMonth(value, monthKey)) return
                 setSelectedDate(value)
                 setListPage((p) => ({ ...p, dated: 1 }))
               }}
             />
           ) : null}
+          {canEdit ? (
           <div className="flex items-center gap-1.5">
             <Input
               value={draft}
@@ -1085,6 +1158,7 @@ export default function TaskManager() {
               <Plus className="h-4 w-4" />
             </Button>
           </div>
+          ) : null}
 
           <ul
             className={cn(
@@ -1098,8 +1172,8 @@ export default function TaskManager() {
             ) : pageTasks.length === 0 ? (
               <li className="px-2 py-6 text-center text-xs leading-relaxed text-slate-500">
                 {s.key === 'dated' ? (
-                  'No tasks yet'
-                ) : (
+                  canEdit ? 'No tasks yet' : 'No daily extras on this date'
+                ) : canEdit ? (
                   <>
                     No tasks yet. Use{' '}
                     <span className="font-semibold text-slate-600 dark:text-slate-400">
@@ -1107,6 +1181,8 @@ export default function TaskManager() {
                     </span>{' '}
                     above, or add one below.
                   </>
+                ) : (
+                  `No ${s.title.toLowerCase()} in ${monthTitle}.`
                 )}
               </li>
             ) : (
@@ -1151,6 +1227,8 @@ export default function TaskManager() {
                         ) : null}
                       </span>
                     )}
+                    {canEdit ? (
+                      <>
                     <Button
                       type="button"
                       variant="ghost"
@@ -1194,6 +1272,8 @@ export default function TaskManager() {
                     >
                       <Trash2 className="h-4 w-4 md:h-3.5 md:w-3.5" />
                     </Button>
+                      </>
+                    ) : null}
                   </li>
                 )
               })
@@ -1232,38 +1312,72 @@ export default function TaskManager() {
           className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col overflow-hidden"
         >
           <div className="mb-2 shrink-0 overflow-hidden rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-500 to-cyan-500 p-px shadow-md">
-            <div className="flex items-center justify-between gap-2 rounded-[11px] bg-white/95 px-2.5 py-1.5 backdrop-blur dark:bg-slate-950/95">
-              <div className="flex min-w-0 items-center gap-2">
-                <CalendarDays className="h-3.5 w-3.5 shrink-0 text-fuchsia-600" aria-hidden />
-                <div className="min-w-0">
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-fuchsia-700">
-                    Current month
-                  </p>
-                  <h1 className="truncate text-base font-bold leading-tight text-slate-900 dark:text-white">
-                    {monthTitle}
-                  </h1>
+            <div className="flex flex-col rounded-[11px] bg-white/95 backdrop-blur dark:bg-slate-950/95">
+              <div className="flex items-center justify-between gap-2 px-2.5 py-1.5">
+                <div className="flex min-w-0 items-center gap-2">
+                  <CalendarDays className="h-3.5 w-3.5 shrink-0 text-fuchsia-600" aria-hidden />
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-fuchsia-700">
+                      {isViewingCurrentMonth ? 'Current month' : 'Viewing month — read only'}
+                    </p>
+                    <h1 className="truncate text-base font-bold leading-tight text-slate-900 dark:text-white">
+                      {monthTitle}
+                    </h1>
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                  {canEdit ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1 border-fuchsia-200/80 bg-white/80 px-2 text-[10px] font-medium text-fuchsia-900 hover:bg-fuchsia-50 dark:border-fuchsia-800 dark:bg-slate-900/80 dark:text-fuchsia-100"
+                    disabled={loading || saving || cloning}
+                    title={`Copy daily, weekly, and monthly tasks from ${prevMonthTitle} (empty sections only)`}
+                    onClick={() => void cloneFromPreviousMonth()}
+                  >
+                    <Copy className="h-3 w-3" aria-hidden />
+                    Copy from last month
+                  </Button>
+                  ) : null}
+                  <span className="rounded-md bg-violet-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-violet-900 dark:bg-violet-950 dark:text-violet-100">
+                    {monthKey}
+                  </span>
+                  <span className="rounded-md bg-fuchsia-50 px-2 py-0.5 text-[10px] font-medium text-fuchsia-900 ring-1 ring-fuchsia-200/80 dark:bg-fuchsia-950/50 dark:text-fuchsia-100">
+                    {totalTaskCount} task{totalTaskCount === 1 ? '' : 's'} total
+                  </span>
                 </div>
               </div>
-              <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 gap-1 border-fuchsia-200/80 bg-white/80 px-2 text-[10px] font-medium text-fuchsia-900 hover:bg-fuchsia-50 dark:border-fuchsia-800 dark:bg-slate-900/80 dark:text-fuchsia-100"
+
+              <div className="border-t border-violet-100 px-2.5 py-1.5 dark:border-violet-900/50">
+                <MonthNavBar
+                  embedded
+                  viewMonth={viewMonth}
+                  onPrev={goPrevMonth}
+                  onNext={goNextMonth}
                   disabled={loading || saving || cloning}
-                  title={`Copy daily, weekly, and monthly tasks from ${prevMonthTitle} (empty sections only)`}
-                  onClick={() => void cloneFromPreviousMonth()}
+                  nextDisabled={isViewingCurrentMonth}
                 >
-                  <Copy className="h-3 w-3" aria-hidden />
-                  Copy from last month
-                </Button>
-                <span className="rounded-md bg-violet-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-violet-900 dark:bg-violet-950 dark:text-violet-100">
-                  {monthKey}
-                </span>
-                <span className="rounded-md bg-fuchsia-50 px-2 py-0.5 text-[10px] font-medium text-fuchsia-900 ring-1 ring-fuchsia-200/80 dark:bg-fuchsia-950/50 dark:text-fuchsia-100">
-                  {totalTaskCount} task{totalTaskCount === 1 ? '' : 's'} total
-                </span>
+                  {!isViewingCurrentMonth ? (
+                    <button
+                      type="button"
+                      onClick={goToCurrentMonth}
+                      disabled={loading || saving || cloning}
+                      className="font-medium text-violet-700 hover:underline disabled:opacity-50 dark:text-violet-300"
+                    >
+                      Back to {currentMonthTitle}
+                    </button>
+                  ) : null}
+                </MonthNavBar>
               </div>
+
+              {!isViewingCurrentMonth ? (
+                <p className="border-t border-amber-200/80 bg-amber-50/90 px-2.5 py-1 text-[11px] leading-snug text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+                  This month is view-only. Use{' '}
+                  <span className="font-semibold">Back to {currentMonthTitle}</span> above to edit
+                  tasks.
+                </p>
+              ) : null}
             </div>
           </div>
 
@@ -1293,10 +1407,13 @@ export default function TaskManager() {
 
           <div className="mt-2 flex shrink-0 items-center justify-between gap-3 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
             <p className="min-w-0 flex-1 text-left text-[11px] leading-snug text-violet-900/70">
-              {existingId
-                ? `You already have a plan for ${monthTitle}. Trash deletes a task immediately; pencil edits save on blur.`
-                : `No plan for ${monthTitle} yet. Copy from last month, add tasks, or click Update this month to save.`}
+              {!canEdit
+                ? 'Past plans cannot be changed here.'
+                : existingId
+                  ? `You already have a plan for ${monthTitle}. Trash deletes a task immediately; pencil edits save on blur.`
+                  : `No plan for ${monthTitle} yet. Copy from last month, add tasks, or click Update this month to save.`}
             </p>
+            {canEdit ? (
             <Button
               type="submit"
               size="sm"
@@ -1305,6 +1422,7 @@ export default function TaskManager() {
             >
               {saving ? 'Saving…' : 'Update this month'}
             </Button>
+            ) : null}
           </div>
         </form>
       </main>

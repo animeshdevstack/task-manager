@@ -3,13 +3,12 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   CalendarDays,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Circle,
   ListChecks,
 } from 'lucide-react'
 import AppPageHeader from '@/components/layout/AppPageHeader'
 import DatedDatePicker from '@/components/tasks/DatedDatePicker'
+import MonthNavBar, { addMonths } from '@/components/tasks/MonthNavBar'
 import { Button } from '@/components/ui/button'
 import { Toast, TOAST_DURATION_MS } from '@/components/ui/toast'
 import {
@@ -52,10 +51,6 @@ function isSameCalendarDay(a, b) {
 
 function startOfDay(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate())
-}
-
-function addMonths(date, delta) {
-  return new Date(date.getFullYear(), date.getMonth() + delta, 1)
 }
 
 function formatDateYmd(d) {
@@ -103,43 +98,6 @@ function isDateInMonth(date, viewMonth) {
   const d = new Date(date)
   return (
     d.getFullYear() === viewMonth.getFullYear() && d.getMonth() === viewMonth.getMonth()
-  )
-}
-
-function MonthNavBar({ viewMonth, onPrev, onNext, children, disabled }) {
-  const prevLabel = formatMonthTitle(addMonths(viewMonth, -1))
-  const nextLabel = formatMonthTitle(addMonths(viewMonth, 1))
-
-  return (
-    <div className="flex shrink-0 items-center justify-between gap-2 rounded-lg border border-violet-200/80 bg-white/80 px-1.5 py-1.5 dark:border-violet-800/50 dark:bg-slate-900/50">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="h-8 shrink-0 gap-1 px-2 text-xs"
-        disabled={disabled}
-        onClick={onPrev}
-        title={prevLabel}
-      >
-        <ChevronLeft className="h-4 w-4" />
-        <span className="hidden sm:inline">Prev</span>
-      </Button>
-      <div className="min-w-0 flex-1 px-1 text-center text-xs text-slate-600 dark:text-slate-400">
-        {children}
-      </div>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="h-8 shrink-0 gap-1 px-2 text-xs"
-        disabled={disabled}
-        onClick={onNext}
-        title={nextLabel}
-      >
-        <span className="hidden sm:inline">Next</span>
-        <ChevronRight className="h-4 w-4" />
-      </Button>
-    </div>
   )
 }
 
@@ -226,6 +184,7 @@ export default function HabitTracker() {
   const today = useMemo(() => new Date(), [])
   const monthKey = useMemo(() => formatYearMonth(viewMonth), [viewMonth])
   const monthTitle = useMemo(() => formatMonthTitle(viewMonth), [viewMonth])
+  const currentMonthTitle = useMemo(() => formatMonthTitle(today), [today])
   const isViewingCurrentMonth = monthKey === formatYearMonth(today)
   const startOfToday = useMemo(() => startOfDay(today), [today])
   const todayYmd = useMemo(() => formatDateYmd(today), [today])
@@ -255,7 +214,12 @@ export default function HabitTracker() {
   }
 
   const goNextMonth = () => {
+    if (isViewingCurrentMonth) return
     setViewMonth((m) => addMonths(m, 1))
+  }
+
+  const goToCurrentMonth = () => {
+    setViewMonth(new Date(today.getFullYear(), today.getMonth(), 1))
   }
 
   const showToast = (message, variant = 'success') => {
@@ -689,21 +653,53 @@ export default function HabitTracker() {
           )}
         >
           <div className="mb-2 shrink-0 overflow-hidden rounded-xl bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-500 p-px shadow-md">
-            <div className="flex items-center justify-between gap-2 rounded-[11px] bg-white/95 px-2.5 py-1.5 backdrop-blur dark:bg-slate-950/95">
-              <div className="flex min-w-0 items-center gap-2">
-                <CalendarDays className="h-3.5 w-3.5 shrink-0 text-teal-600" aria-hidden />
-                <div className="min-w-0">
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-teal-700">
-                    {isViewingCurrentMonth ? 'Current month' : 'Viewing month'}
-                  </p>
-                  <h1 className="truncate text-base font-bold leading-tight text-slate-900 dark:text-white">
-                    {monthTitle}
-                  </h1>
+            <div className="flex flex-col rounded-[11px] bg-white/95 backdrop-blur dark:bg-slate-950/95">
+              <div className="flex items-center justify-between gap-2 px-2.5 py-1.5">
+                <div className="flex min-w-0 items-center gap-2">
+                  <CalendarDays className="h-3.5 w-3.5 shrink-0 text-teal-600" aria-hidden />
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-teal-700">
+                      {isViewingCurrentMonth ? 'Current month' : 'Viewing month — read only'}
+                    </p>
+                    <h1 className="truncate text-base font-bold leading-tight text-slate-900 dark:text-white">
+                      {monthTitle}
+                    </h1>
+                  </div>
                 </div>
+                <span className="shrink-0 rounded-md bg-emerald-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
+                  {monthKey}
+                </span>
               </div>
-              <span className="shrink-0 rounded-md bg-emerald-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
-                {monthKey}
-              </span>
+
+              <div className="border-t border-teal-100 px-2.5 py-1.5 dark:border-teal-900/50">
+                <MonthNavBar
+                  embedded
+                  viewMonth={viewMonth}
+                  onPrev={goPrevMonth}
+                  onNext={goNextMonth}
+                  disabled={loading || patching}
+                  nextDisabled={isViewingCurrentMonth}
+                >
+                  {!isViewingCurrentMonth ? (
+                    <button
+                      type="button"
+                      onClick={goToCurrentMonth}
+                      disabled={loading || patching}
+                      className="font-medium text-violet-700 hover:underline disabled:opacity-50 dark:text-violet-300"
+                    >
+                      Back to {currentMonthTitle}
+                    </button>
+                  ) : null}
+                </MonthNavBar>
+              </div>
+
+              {!isViewingCurrentMonth ? (
+                <p className="border-t border-amber-200/80 bg-amber-50/90 px-2.5 py-1 text-[11px] leading-snug text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+                  This month is view-only. Use{' '}
+                  <span className="font-semibold">Back to {currentMonthTitle}</span> above to return
+                  to current habits.
+                </p>
+              ) : null}
             </div>
           </div>
 
@@ -757,14 +753,9 @@ export default function HabitTracker() {
                 <p className="py-12 text-center text-sm text-slate-500">Loading habits…</p>
               ) : (
                 <>
-                  <MonthNavBar
-                    viewMonth={viewMonth}
-                    onPrev={goPrevMonth}
-                    onNext={goNextMonth}
-                    disabled={loading || patching}
-                  >
+                  <p className="shrink-0 text-center text-xs text-slate-600 dark:text-slate-400">
                     {monthNavHint}
-                  </MonthNavBar>
+                  </p>
 
               {!hasPlan ? (
                 <div className="flex flex-col items-center gap-3 py-12 text-center">

@@ -42,6 +42,13 @@ const formatCurrentMonthAndYear = (d: Date): string => {
   return `${y}-${m}`;
 };
 
+const assertCurrentMonthPlan = (monthYear: string): void => {
+  const current = formatCurrentMonthAndYear(new Date());
+  if (monthYear !== current) {
+    throw new Error("Tasks can only be created or modified for the current month");
+  }
+};
+
 const isTransactionUnsupported = (error: unknown): boolean => {
   const msg = error instanceof Error ? error.message : String(error);
   return /Transaction numbers|replica set|not support.*transaction/i.test(msg);
@@ -76,6 +83,7 @@ const CreateTaskService = async (data: any, userId: string): Promise<any> => {
   try {
     const { DailyTasks, WeeklyTasks, MonthlyTasks } = data;
     const monthYear = formatCurrentMonthAndYear(new Date());
+    assertCurrentMonthPlan(monthYear);
     const DatedTasks = normalizeDatedTasks(data.DatedTasks, monthYear);
 
     return await runWithTransaction(async (session) => {
@@ -172,6 +180,7 @@ const UpdateTaskService = async (id: string, data: any, userId: string): Promise
     if (!existing) {
       throw new Error("Task not found");
     }
+    assertCurrentMonthPlan(existing.currentMonthAndYear);
     const DatedTasks = normalizeDatedTasks(data.DatedTasks, existing.currentMonthAndYear);
 
     return await runWithTransaction(async (session) => {
@@ -198,6 +207,14 @@ const UpdateTaskService = async (id: string, data: any, userId: string): Promise
 const DeleteTaskService = async (id: string, userId: string): Promise<any> => {
   try {
     return await runWithTransaction(async (session) => {
+      const findQuery = AddTask.findOne({ _id: id, userId });
+      if (session) findQuery.session(session);
+      const existing = await findQuery;
+      if (!existing) {
+        throw new Error("Task not found");
+      }
+      assertCurrentMonthPlan(existing.currentMonthAndYear);
+
       const deleteQuery = AddTask.findOneAndDelete({ _id: id, userId });
       if (session) deleteQuery.session(session);
       const deleted = await deleteQuery;
