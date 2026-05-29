@@ -14,6 +14,20 @@ const taskNameItemSchema = new Schema(
   { _id: true },
 );
 
+const datedTaskEntrySchema = new Schema(
+  {
+    date: {
+      type: String,
+      required: true,
+    },
+    tasks: {
+      type: [taskNameItemSchema],
+      default: [],
+    },
+  },
+  { _id: false },
+);
+
 const addTaskSchema = new Schema(
   {
     userId: {
@@ -36,6 +50,10 @@ const addTaskSchema = new Schema(
     MonthlyTasks: {
       type: [taskNameItemSchema],
       required: true,
+    },
+    DatedTasks: {
+      type: [datedTaskEntrySchema],
+      default: [],
     },
     createdBy: {
       type: Schema.Types.ObjectId,

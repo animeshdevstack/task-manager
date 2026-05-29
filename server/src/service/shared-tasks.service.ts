@@ -22,14 +22,24 @@ const toPlain = <T>(doc: T): T => {
   return doc;
 };
 
+type DatedTaskGroup = { date?: string; tasks?: TaskItem[] };
+
 const getPrivateSubTaskIds = (addTask: {
   DailyTasks: TaskItem[];
   WeeklyTasks: TaskItem[];
   MonthlyTasks: TaskItem[];
+  DatedTasks?: DatedTaskGroup[];
 }): Set<string> => {
   const ids = new Set<string>();
   for (const list of [addTask.DailyTasks, addTask.WeeklyTasks, addTask.MonthlyTasks]) {
     for (const item of list ?? []) {
+      if (item.isPrivate && item._id) {
+        ids.add(item._id.toString());
+      }
+    }
+  }
+  for (const group of addTask.DatedTasks ?? []) {
+    for (const item of group.tasks ?? []) {
       if (item.isPrivate && item._id) {
         ids.add(item._id.toString());
       }
@@ -43,6 +53,7 @@ const stripPrivateFromAddTask = (doc: unknown): unknown => {
     DailyTasks?: TaskItem[];
     WeeklyTasks?: TaskItem[];
     MonthlyTasks?: TaskItem[];
+    DatedTasks?: DatedTaskGroup[];
     [key: string]: unknown;
   };
 
@@ -51,11 +62,19 @@ const stripPrivateFromAddTask = (doc: unknown): unknown => {
       .filter((t) => !t.isPrivate)
       .map(({ taskName, _id }) => ({ taskName, ...(_id ? { _id } : {}) }));
 
+  const datedTasks = (plain.DatedTasks ?? [])
+    .map((group) => ({
+      date: group.date,
+      tasks: filterList(group.tasks ?? []),
+    }))
+    .filter((group) => group.tasks.length > 0);
+
   return {
     ...plain,
     DailyTasks: filterList(plain.DailyTasks ?? []),
     WeeklyTasks: filterList(plain.WeeklyTasks ?? []),
     MonthlyTasks: filterList(plain.MonthlyTasks ?? []),
+    DatedTasks: datedTasks,
   };
 };
 
