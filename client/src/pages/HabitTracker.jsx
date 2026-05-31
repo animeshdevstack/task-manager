@@ -148,7 +148,7 @@ const TABS = [
   },
   {
     key: 'dated',
-    title: 'Daily extras habits',
+    title: 'add-ons',
     description: 'View any day · check off today only',
     accent: 'from-sky-500 to-blue-500',
     ring: 'ring-sky-400/40',
