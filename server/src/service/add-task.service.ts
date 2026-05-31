@@ -181,7 +181,12 @@ const UpdateTaskService = async (id: string, data: any, userId: string): Promise
       throw new Error("Task not found");
     }
     assertCurrentMonthPlan(existing.currentMonthAndYear);
-    const DatedTasks = normalizeDatedTasks(data.DatedTasks, existing.currentMonthAndYear);
+    const DatedTasks = normalizeDatedTasks(
+      data.DatedTasks,
+      existing.currentMonthAndYear,
+      new Date(),
+      existing.DatedTasks,
+    );
 
     return await runWithTransaction(async (session) => {
       const updated = await AddTask.findOneAndUpdate(

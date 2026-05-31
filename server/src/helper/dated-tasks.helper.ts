@@ -69,10 +69,17 @@ export const normalizeDatedTasks = (
   datedTasks: unknown,
   monthYear: string,
   referenceDate: Date = new Date(),
+  existingDatedTasks?: { date?: string }[],
 ): { date: string; tasks: unknown[] }[] => {
   if (!Array.isArray(datedTasks)) {
     return [];
   }
+
+  const existingDates = new Set(
+    (existingDatedTasks ?? [])
+      .map((entry) => entry.date?.trim?.() ?? entry.date ?? "")
+      .filter(Boolean),
+  );
 
   const byDate = new Map<string, unknown[]>();
 
@@ -85,7 +92,7 @@ export const normalizeDatedTasks = (
     if (!isDateInMonth(rawDate, monthYear)) {
       throw new Error(`Date ${rawDate} must fall within month ${monthYear}`);
     }
-    if (!isAllowedDatedTaskDate(rawDate, monthYear, referenceDate)) {
+    if (!isAllowedDatedTaskDate(rawDate, monthYear, referenceDate) && !existingDates.has(rawDate)) {
       throw new Error(
         `Date ${rawDate} must be today or later within ${monthYear}`,
       );

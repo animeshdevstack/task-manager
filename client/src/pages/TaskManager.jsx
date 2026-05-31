@@ -312,7 +312,7 @@ const TASK_SECTIONS = [
   },
   {
     key: 'dated',
-    title: 'Daily extras',
+    title: 'Add-ons',
     description: 'Extra tasks for a chosen day · not copied from previous months',
     accent: 'from-sky-500 to-blue-500',
     ring: 'ring-sky-400/40',
