@@ -3,10 +3,15 @@ import { AddTask } from "../model/add-task.model";
 import { ReviewTask } from "../model/review-task.model";
 import {
   buildDatedSubTaskIdMap,
-  formatDateYmd,
+  DATE_YMD_RE,
   isAllowedDatedTaskDate,
+  resolvePatchDateYmd,
 } from "../helper/dated-tasks.helper";
-import { isSameCalendarDay } from "../helper/review-date.helper";
+import {
+  findReviewSlotByYmd,
+  indexReviewSlotByYmd,
+  isSameCalendarDay,
+} from "../helper/review-date.helper";
 import {
   AddTaskForReview,
   buildReviewPayloadFromAddTask,
@@ -16,48 +21,60 @@ import {
 
 export type { AddTaskForReview, DatedTaskEntry } from "../helper/review-sync.helper";
 
-const createReviewTaskFromAddTask = async (
-  addTaskDoc: AddTaskForReview,
-  session?: ClientSession,
-): Promise<unknown> => {
-  const payload = buildReviewPayloadFromAddTask(addTaskDoc);
-  const [review] = await ReviewTask.create([payload], session ? { session } : {});
-  return review;
+const MONTH_YM_RE = /^\d{4}-\d{2}$/;
+
+type ReviewDocLike = {
+  DailyTasks: { todayDate: Date; Task: { subTaskId: Types.ObjectId; subTaskName: string; isCompleted: boolean }[] }[];
+  WeeklyTasks: { sundayDate: Date; Task: { subTaskId: Types.ObjectId; subTaskName: string; isCompleted: boolean }[] }[];
+  MonthlyTasks: {
+    monthEndDate: Date;
+    Task: { subTaskId: Types.ObjectId; subTaskName: string; isCompleted: boolean }[];
+  };
 };
 
-const syncReviewTaskFromAddTask = async (
+const existingReviewState = (existing: ReviewDocLike) => ({
+  DailyTasks: existing.DailyTasks.map((e) => ({
+    todayDate: e.todayDate,
+    Task: toReviewSubTasks(e.Task),
+  })),
+  WeeklyTasks: existing.WeeklyTasks.map((e) => ({
+    sundayDate: e.sundayDate,
+    Task: toReviewSubTasks(e.Task),
+  })),
+  MonthlyTasks: {
+    monthEndDate: existing.MonthlyTasks.monthEndDate,
+    Task: toReviewSubTasks(existing.MonthlyTasks.Task),
+  },
+});
+
+const upsertReviewTaskFromAddTask = async (
   addTaskDoc: AddTaskForReview,
   session?: ClientSession,
 ): Promise<unknown> => {
   const existing = await ReviewTask.findOne({
-    TaskId: addTaskDoc._id,
     userId: addTaskDoc.userId,
+    currentMonthAndYear: addTaskDoc.currentMonthAndYear,
   }).session(session ?? null);
 
-  if (!existing) {
-    return createReviewTaskFromAddTask(addTaskDoc, session);
+  if (existing) {
+    const update = buildSyncedReviewUpdate(addTaskDoc, existingReviewState(existing));
+
+    return ReviewTask.findOneAndUpdate(
+      { _id: existing._id },
+      {
+        $set: {
+          ...update,
+          TaskId: addTaskDoc._id,
+          currentMonthAndYear: addTaskDoc.currentMonthAndYear,
+        },
+      },
+      { new: true, session: session ?? undefined },
+    );
   }
 
-  const update = buildSyncedReviewUpdate(addTaskDoc, {
-    DailyTasks: existing.DailyTasks.map((e) => ({
-      todayDate: e.todayDate,
-      Task: toReviewSubTasks(e.Task),
-    })),
-    WeeklyTasks: existing.WeeklyTasks.map((e) => ({
-      sundayDate: e.sundayDate,
-      Task: toReviewSubTasks(e.Task),
-    })),
-    MonthlyTasks: {
-      monthEndDate: existing.MonthlyTasks.monthEndDate,
-      Task: toReviewSubTasks(existing.MonthlyTasks.Task),
-    },
-  });
-
-  return ReviewTask.findOneAndUpdate(
-    { TaskId: addTaskDoc._id, userId: addTaskDoc.userId },
-    { $set: update },
-    { new: true, session: session ?? undefined },
-  );
+  const payload = buildReviewPayloadFromAddTask(addTaskDoc);
+  const [review] = await ReviewTask.create([payload], session ? { session } : {});
+  return review;
 };
 
 const deleteReviewTaskByTaskId = async (
@@ -78,8 +95,30 @@ const MAX_LIMIT = 100;
 
 const GetReviewTasksService = async (
   userId: string,
-  options: { page?: number; limit?: number } = {},
+  options: { page?: number; limit?: number; month?: string } = {},
 ): Promise<unknown> => {
+  if (options.month) {
+    if (!MONTH_YM_RE.test(options.month)) {
+      throw new Error("Invalid month format (YYYY-MM)");
+    }
+
+    const task = await ReviewTask.findOne({
+      userId,
+      currentMonthAndYear: options.month,
+    }).exec();
+
+    return {
+      task,
+      tasks: task ? [task] : [],
+      pagination: {
+        page: 1,
+        limit: 1,
+        total: task ? 1 : 0,
+        totalPages: task ? 1 : 0,
+      },
+    };
+  }
+
   const page = Math.max(1, Math.floor(options.page ?? DEFAULT_PAGE) || DEFAULT_PAGE);
   const limitRaw = Math.floor(options.limit ?? DEFAULT_LIMIT) || DEFAULT_LIMIT;
   const limit = Math.min(MAX_LIMIT, Math.max(1, limitRaw));
@@ -117,7 +156,8 @@ const GetReviewTaskByIdService = async (
 
 type PatchReviewPayload = {
   type: "daily" | "weekly" | "monthly";
-  date: string | Date;
+  date?: string | Date;
+  dateYmd?: string;
   subTaskId: string;
   isCompleted: boolean;
 };
@@ -127,11 +167,12 @@ const PatchReviewTaskCompletionService = async (
   userId: string,
   payload: PatchReviewPayload,
 ): Promise<unknown> => {
-  const { type, date, subTaskId, isCompleted } = payload;
-  const targetDate = new Date(date);
-  if (Number.isNaN(targetDate.getTime())) {
-    throw new Error("Invalid date");
-  }
+  const { type, date, dateYmd, subTaskId, isCompleted } = payload;
+  const targetYmd = resolvePatchDateYmd({ dateYmd, date });
+  const targetDate =
+    date != null && !DATE_YMD_RE.test(String(date).trim())
+      ? new Date(date)
+      : new Date(`${targetYmd}T12:00:00`);
 
   const review = await ReviewTask.findOne({ _id: id, userId });
   if (!review) {
@@ -142,21 +183,17 @@ const PatchReviewTaskCompletionService = async (
   const datedSubTaskDates = buildDatedSubTaskIdMap(
     addTask?.DatedTasks as { date: string; tasks?: { _id?: Types.ObjectId }[] }[] | undefined,
   );
+  const monthYear =
+    review.currentMonthAndYear ?? addTask?.currentMonthAndYear ?? "";
 
   let updated = false;
 
   if (type === "daily") {
     const scheduledDatedDate = datedSubTaskDates.get(subTaskId);
     if (scheduledDatedDate) {
-      const targetYmd = formatDateYmd(targetDate);
-      const todayYmd = formatDateYmd(new Date());
       if (targetYmd !== scheduledDatedDate) {
         throw new Error("Daily extras can only be updated on their scheduled date");
       }
-      if (targetYmd !== todayYmd) {
-        throw new Error("Daily extras can only be updated for today");
-      }
-      const monthYear = addTask?.currentMonthAndYear;
       if (
         !monthYear ||
         !isAllowedDatedTaskDate(scheduledDatedDate, monthYear)
@@ -165,16 +202,25 @@ const PatchReviewTaskCompletionService = async (
       }
     }
 
-    for (const entry of review.DailyTasks) {
-      if (!isSameCalendarDay(entry.todayDate, targetDate)) continue;
-      for (const task of entry.Task) {
+    const dailyByYmd = indexReviewSlotByYmd(
+      review.DailyTasks,
+      (entry) => entry.todayDate,
+    );
+    const dailySlot = findReviewSlotByYmd(
+      review.DailyTasks,
+      dailyByYmd,
+      targetYmd,
+      monthYear,
+      (entry) => entry.todayDate,
+    );
+    if (dailySlot) {
+      for (const task of dailySlot.Task) {
         if (task.subTaskId.toString() === subTaskId) {
           task.isCompleted = isCompleted;
           updated = true;
           break;
         }
       }
-      if (updated) break;
     }
   } else if (type === "weekly") {
     for (const entry of review.WeeklyTasks) {
@@ -214,8 +260,7 @@ const PatchReviewTaskCompletionService = async (
 };
 
 export {
-  createReviewTaskFromAddTask,
-  syncReviewTaskFromAddTask,
+  upsertReviewTaskFromAddTask,
   deleteReviewTaskByTaskId,
   GetReviewTasksService,
   GetReviewTaskByIdService,

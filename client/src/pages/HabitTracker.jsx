@@ -28,6 +28,7 @@ import {
   buildDatedSubTaskMap,
   defaultSelectedDateForMonth,
   formatDateYmd,
+  matchesCalendarYmd,
   monthDateBounds,
   shiftDateYmd,
 } from '@/lib/dated-tasks'
@@ -70,13 +71,6 @@ function isDateInMonth(date, viewMonth) {
   return (
     d.getFullYear() === viewMonth.getFullYear() && d.getMonth() === viewMonth.getMonth()
   )
-}
-
-function planIdMatches(reviewTaskId, planId) {
-  if (!reviewTaskId || !planId) return false
-  const a = typeof reviewTaskId === 'string' ? reviewTaskId : reviewTaskId.toString?.()
-  const b = typeof planId === 'string' ? planId : planId.toString?.()
-  return a === b
 }
 
 const HABIT_TRACKER_TAB_KEY = 'habit-tracker-active-tab'
@@ -249,9 +243,10 @@ export default function HabitTracker() {
       setHasPlan(true)
       setPlan(plan)
 
-      const listRes = await reviewRequest('/get-user-review-task?page=1&limit=50')
-      const reviews = listRes.data?.tasks ?? []
-      const summary = reviews.find((r) => planIdMatches(r.TaskId, plan._id))
+      const reviewRes = await reviewRequest(
+        `/get-user-review-task?month=${encodeURIComponent(monthKey)}`,
+      )
+      const summary = reviewRes.data?.task ?? reviewRes.data?.tasks?.[0] ?? null
 
       if (!summary?._id) {
         setReview(null)
@@ -283,24 +278,23 @@ export default function HabitTracker() {
     navigate('/login', { replace: true })
   }
 
-  function tryToggleDailyExtra(type, slotDate, subTaskId, nextCompleted) {
-    const slotYmd = formatDateYmd(new Date(slotDate))
-    if (!isViewingCurrentMonth || slotYmd !== todayYmd) {
+  function tryToggleDailyExtra(type, dateYmd, subTaskId, nextCompleted) {
+    if (!isViewingCurrentMonth || dateYmd !== todayYmd) {
       showToast('You can only update daily extras for today', 'error')
       return
     }
-    void toggleTask(type, slotDate, subTaskId, nextCompleted)
+    void toggleTask(type, subTaskId, nextCompleted, dateYmd)
   }
 
-  async function toggleTask(type, slotDate, subTaskId, nextCompleted) {
-    if (!review?._id) return
+  async function toggleTask(type, subTaskId, nextCompleted, dateYmd) {
+    if (!review?._id || !dateYmd) return
     setPatching(true)
     try {
       await reviewRequest(`/update-user-review-task/${review._id}`, {
         method: 'PATCH',
         body: JSON.stringify({
           type,
-          date: new Date(slotDate).toISOString(),
+          dateYmd,
           subTaskId: typeof subTaskId === 'string' ? subTaskId : subTaskId.toString(),
           isCompleted: nextCompleted,
         }),
@@ -490,10 +484,9 @@ export default function HabitTracker() {
       }
     }
     if (activeTab === 'dated' && review) {
-      const slot = review.DailyTasks?.find((entry) => {
-        const d = new Date(entry.todayDate)
-        return formatDateYmd(d) === selectedHabitDate
-      })
+      const slot = review.DailyTasks?.find((entry) =>
+        matchesCalendarYmd(new Date(entry.todayDate), selectedHabitDate),
+      )
       const datedIdsForDay = new Set(
         [...datedSubTaskMap.entries()]
           .filter(([, dateYmd]) => dateYmd === selectedHabitDate)
@@ -505,7 +498,7 @@ export default function HabitTracker() {
       })
       return {
         type: 'daily',
-        date: slot?.todayDate ?? new Date(`${selectedHabitDate}T12:00:00`),
+        dateYmd: selectedHabitDate,
         label: formatDateLabel(new Date(`${selectedHabitDate}T12:00:00`)),
         tasks,
         canEdit: canUpdateDailyExtrasToday && Boolean(slot),
@@ -535,10 +528,9 @@ export default function HabitTracker() {
 
   const datedHabitTaskCount = useMemo(() => {
     if (!review) return 0
-    const slot = review.DailyTasks?.find((entry) => {
-      const d = new Date(entry.todayDate)
-      return formatDateYmd(d) === selectedHabitDate
-    })
+    const slot = review.DailyTasks?.find((entry) =>
+      matchesCalendarYmd(new Date(entry.todayDate), selectedHabitDate),
+    )
     const datedIdsForDay = new Set(
       [...datedSubTaskMap.entries()]
         .filter(([, dateYmd]) => dateYmd === selectedHabitDate)
@@ -898,9 +890,9 @@ export default function HabitTracker() {
                                         onClick={() =>
                                           void toggleTask(
                                             'weekly',
-                                            cell.date,
                                             task.id,
                                             !cell.isCompleted,
+                                            formatDateYmd(new Date(cell.date)),
                                           )
                                         }
                                         className={cn(
@@ -1006,9 +998,9 @@ export default function HabitTracker() {
                                         onClick={() =>
                                           void toggleTask(
                                             'daily',
-                                            cell.date,
                                             task.id,
                                             !cell.isCompleted,
+                                            todayYmd,
                                           )
                                         }
                                         className={cn(
@@ -1097,7 +1089,7 @@ export default function HabitTracker() {
                                 onClick={() =>
                                   tryToggleDailyExtra(
                                     activeTasks.type,
-                                    activeTasks.date,
+                                    activeTasks.dateYmd,
                                     id,
                                     !task.isCompleted,
                                   )
@@ -1133,7 +1125,7 @@ export default function HabitTracker() {
                                 onClick={() =>
                                   tryToggleDailyExtra(
                                     activeTasks.type,
-                                    activeTasks.date,
+                                    activeTasks.dateYmd,
                                     id,
                                     !task.isCompleted,
                                   )
@@ -1198,9 +1190,9 @@ export default function HabitTracker() {
                                 onClick={() =>
                                   void toggleTask(
                                     activeTasks.type,
-                                    activeTasks.date,
                                     id,
                                     !task.isCompleted,
+                                    formatDateYmd(new Date(activeTasks.date)),
                                   )
                                 }
                                 className={cn(

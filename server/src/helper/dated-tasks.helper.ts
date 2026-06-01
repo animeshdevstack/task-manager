@@ -1,10 +1,58 @@
-const DATE_YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
+export const DATE_YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export const formatDateYmd = (d: Date): string => {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+};
+
+/** UTC calendar day — matches legacy Mongo dates stored with offset shifts. */
+export const formatDateYmdUtc = (d: Date): string => {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+/** True when a stored instant represents the given YYYY-MM-DD (local or UTC). */
+export const matchesCalendarYmd = (d: Date, ymd: string): boolean =>
+  formatDateYmd(d) === ymd || formatDateYmdUtc(d) === ymd;
+
+/**
+ * Canonical calendar day for PATCH payloads.
+ * Prefer explicit YYYY-MM-DD from the client; otherwise derive from an ISO instant.
+ */
+export const parsePatchDateYmd = (input: string | Date): string => {
+  if (typeof input === "string") {
+    const trimmed = input.trim();
+    if (DATE_YMD_RE.test(trimmed)) {
+      return trimmed;
+    }
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new Error("Invalid date");
+    }
+    return formatDateYmd(parsed);
+  }
+  if (Number.isNaN(input.getTime())) {
+    throw new Error("Invalid date");
+  }
+  return formatDateYmd(input);
+};
+
+export const resolvePatchDateYmd = (payload: {
+  dateYmd?: string;
+  date?: string | Date;
+}): string => {
+  const rawYmd = payload.dateYmd?.trim();
+  if (rawYmd && DATE_YMD_RE.test(rawYmd)) {
+    return rawYmd;
+  }
+  if (payload.date == null) {
+    throw new Error("Invalid date");
+  }
+  return parsePatchDateYmd(payload.date);
 };
 
 export const isDateInMonth = (dateStr: string, monthYear: string): boolean =>

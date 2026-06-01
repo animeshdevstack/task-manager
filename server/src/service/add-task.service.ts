@@ -2,8 +2,7 @@ import mongoose from "mongoose";
 import { AddTask } from "../model/add-task.model";
 import { normalizeDatedTasks } from "../helper/dated-tasks.helper";
 import {
-  createReviewTaskFromAddTask,
-  syncReviewTaskFromAddTask,
+  upsertReviewTaskFromAddTask,
   deleteReviewTaskByTaskId,
   AddTaskForReview,
 } from "./review-task.service";
@@ -111,7 +110,7 @@ const applyTaskPlanUpdate = async (
       throw new Error("Task not found");
     }
 
-    await syncReviewTaskFromAddTask(toAddTaskForReview(updated), session);
+    await upsertReviewTaskFromAddTask(toAddTaskForReview(updated), session);
     return updated;
   });
 };
@@ -159,7 +158,7 @@ const CreateTaskService = async (data: any, userId: string): Promise<any> => {
         throw new Error("Failed to create task");
       }
 
-      await createReviewTaskFromAddTask(toAddTaskForReview(doc), session);
+      await upsertReviewTaskFromAddTask(toAddTaskForReview(doc), session);
       return doc;
     });
   } catch (error) {

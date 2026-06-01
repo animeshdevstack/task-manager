@@ -73,6 +73,10 @@ const reviewTaskSchema = new Schema(
       ref: "AddTask",
       required: true,
     },
+    currentMonthAndYear: {
+      type: String,
+      required: true,
+    },
     DailyTasks: {
       type: [reviewDailyEntrySchema],
       required: true,
@@ -90,5 +94,7 @@ const reviewTaskSchema = new Schema(
   },
   { timestamps: true },
 );
+
+reviewTaskSchema.index({ userId: 1, currentMonthAndYear: 1 }, { unique: true });
 
 export const ReviewTask = model("ReviewTask", reviewTaskSchema);

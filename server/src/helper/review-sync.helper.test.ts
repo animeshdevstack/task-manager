@@ -49,8 +49,9 @@ const makeWeeklyExisting = (
 };
 
 describe("buildReviewPayloadFromAddTask", () => {
-  it("gives each Sunday an independent task array", () => {
+  it("includes currentMonthAndYear and gives each Sunday an independent task array", () => {
     const payload = buildReviewPayloadFromAddTask(baseAddTask());
+    assert.equal(payload.currentMonthAndYear, "2026-05");
     assert.ok(payload.WeeklyTasks.length >= 2);
 
     const first = payload.WeeklyTasks[0]!;

@@ -7,9 +7,11 @@
     "dev": "nodemon",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/helper/review-sync.helper.test.ts",
+    "test": "tsx --test src/helper/review-sync.helper.test.ts src/helper/dated-tasks.helper.test.ts",
     "dedupe-plans": "node scripts/dedupe-addtasks.mjs",
-    "dedupe-plans:dry-run": "node scripts/dedupe-addtasks.mjs --dry-run"
+    "dedupe-plans:dry-run": "node scripts/dedupe-addtasks.mjs --dry-run",
+    "dedupe-reviews": "node scripts/dedupe-reviewtasks.mjs",
+    "dedupe-reviews:dry-run": "node scripts/dedupe-reviewtasks.mjs --dry-run"
   },
   "keywords": [],
   "author": "",

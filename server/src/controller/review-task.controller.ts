@@ -14,9 +14,11 @@ const GetReviewTasks = async (req: Request, res: Response) => {
     }
     const pageNum = Number(req.query.page);
     const limitNum = Number(req.query.limit);
+    const month = typeof req.query.month === "string" ? req.query.month : undefined;
     const data = await GetReviewTasksService(userId, {
       page: Number.isFinite(pageNum) && pageNum >= 1 ? pageNum : undefined,
       limit: Number.isFinite(limitNum) && limitNum >= 1 ? limitNum : undefined,
+      month,
     });
     res.status(200).json({
       success: true,
@@ -65,12 +67,18 @@ const PatchReviewTask = async (req: Request, res: Response) => {
       return;
     }
     const { id } = req.params;
-    const { type, date, subTaskId, isCompleted } = req.body;
+    const { type, date, dateYmd, subTaskId, isCompleted } = req.body;
 
-    if (!type || !date || !subTaskId || typeof isCompleted !== "boolean") {
+    if (
+      !type ||
+      (!date && !dateYmd) ||
+      !subTaskId ||
+      typeof isCompleted !== "boolean"
+    ) {
       res.status(400).json({
         success: false,
-        message: "type, date, subTaskId, and isCompleted are required",
+        message:
+          "type, subTaskId, isCompleted, and date or dateYmd are required",
       });
       return;
     }
@@ -78,6 +86,7 @@ const PatchReviewTask = async (req: Request, res: Response) => {
     const data = await PatchReviewTaskCompletionService(id as string, userId, {
       type,
       date,
+      dateYmd,
       subTaskId,
       isCompleted,
     });
