@@ -26,11 +26,14 @@ import {
 import { clearSession, getStoredUser } from '@/lib/auth-api'
 import {
   buildDatedSubTaskMap,
+  dayYmdInMonth,
   defaultSelectedDateForMonth,
   formatDateYmd,
   matchesCalendarYmd,
   monthDateBounds,
+  resolveYmdForInstant,
   shiftDateYmd,
+  sundayYmdsInMonth,
 } from '@/lib/dated-tasks'
 import { reviewRequest } from '@/lib/review-api'
 import { tasksRequest } from '@/lib/tasks-api'
@@ -331,11 +334,12 @@ export default function HabitTracker() {
     const days = Array.from({ length: daysInMonth }, (_, i) => i + 1)
 
     const slotByDay = new Map()
-    for (const entry of review.DailyTasks) {
-      const d = new Date(entry.todayDate)
-      if (d.getFullYear() === year && d.getMonth() === monthIndex) {
-        slotByDay.set(d.getDate(), entry)
-      }
+    for (let day = 1; day <= daysInMonth; day++) {
+      const ymd = dayYmdInMonth(monthKey, day)
+      const entry = review.DailyTasks.find((e) =>
+        matchesCalendarYmd(new Date(e.todayDate), ymd),
+      )
+      if (entry) slotByDay.set(day, entry)
     }
 
     const taskMap = new Map()
@@ -363,8 +367,14 @@ export default function HabitTracker() {
       }
     }
 
-    const todayDay = isViewingCurrentMonth ? today.getDate() : null
-    const todaySlot = todayDay != null ? slotByDay.get(todayDay) : null
+    const todayDay = isViewingCurrentMonth
+      ? Number(todayYmd.split('-')[2]) || null
+      : null
+    const todaySlot = isViewingCurrentMonth
+      ? review.DailyTasks.find((e) =>
+          matchesCalendarYmd(new Date(e.todayDate), todayYmd),
+        ) ?? null
+      : null
     const todayTasks = (todaySlot?.Task ?? []).filter((t) => {
       const id = t.subTaskId?.toString?.() ?? String(t.subTaskId)
       return !datedSubTaskMap.has(id)
@@ -379,7 +389,7 @@ export default function HabitTracker() {
       todayTasks,
       isViewingCurrentMonth,
     }
-  }, [review, monthKey, today, isViewingCurrentMonth, datedSubTaskMap])
+  }, [review, monthKey, today, todayYmd, isViewingCurrentMonth, datedSubTaskMap])
 
   const filteredWeeklySlots = useMemo(() => {
     const slots = review?.WeeklyTasks ?? []
@@ -410,11 +420,15 @@ export default function HabitTracker() {
 
     const editableIndex = nextSundayIndex >= 0 ? nextSundayIndex : null
 
+    const sundayYmds = sundayYmdsInMonth(monthKey)
     const sundays = filteredWeeklySlots.map((entry, index) => {
       const d = startOfDay(new Date(entry.sundayDate))
+      const dateYmd =
+        resolveYmdForInstant(entry.sundayDate, sundayYmds) ?? formatDateYmd(d)
       return {
         index,
         date: entry.sundayDate,
+        dateYmd,
         label: formatDateLabel(d),
         canEdit: index === editableIndex,
       }
@@ -441,6 +455,7 @@ export default function HabitTracker() {
       return {
         isCompleted: match.isCompleted,
         date: slot.sundayDate,
+        dateYmd: sundays[sundayIndex]?.dateYmd,
         canEdit: sundays[sundayIndex]?.canEdit ?? false,
       }
     }
@@ -458,7 +473,7 @@ export default function HabitTracker() {
       nextSundayLabel:
         highlightIndex != null ? sundays[highlightIndex]?.label : null,
     }
-  }, [filteredWeeklySlots, startOfToday, nextSundayIndex])
+  }, [filteredWeeklySlots, monthKey, startOfToday, nextSundayIndex])
 
   const monthlySlot = review?.MonthlyTasks
 
@@ -476,10 +491,12 @@ export default function HabitTracker() {
       }
     }
     if (activeTab === 'monthly' && monthlySlot) {
-      const monthEnd = startOfDay(new Date(monthlySlot.monthEndDate))
+      const monthEndYmd = monthDateBounds(monthKey).max
+      const monthEnd = startOfDay(new Date(`${monthEndYmd}T12:00:00`))
       return {
         type: 'monthly',
         date: monthlySlot.monthEndDate,
+        dateYmd: monthEndYmd,
         label: formatDateLabel(new Date(monthlySlot.monthEndDate)),
         tasks: monthlySlot.Task ?? [],
         canEdit: monthEnd >= startOfToday,
@@ -894,7 +911,7 @@ export default function HabitTracker() {
                                             'weekly',
                                             task.id,
                                             !cell.isCompleted,
-                                            formatDateYmd(new Date(cell.date)),
+                                            cell.dateYmd,
                                           )
                                         }
                                         className={cn(
@@ -1194,7 +1211,7 @@ export default function HabitTracker() {
                                     activeTasks.type,
                                     id,
                                     !task.isCompleted,
-                                    formatDateYmd(new Date(activeTasks.date)),
+                                    activeTasks.dateYmd,
                                   )
                                 }
                                 className={cn(

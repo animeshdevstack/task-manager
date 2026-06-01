@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  getLastDateOfMonth,
   instantMatchesCalendarYmd,
   matchesCalendarYmd,
   parsePatchDateYmd,
@@ -30,5 +31,12 @@ describe("dated-tasks.helper", () => {
   it("instantMatchesCalendarYmd matches IST-midnight stored as prior UTC evening", () => {
     const istJune1MidnightUtc = new Date("2026-05-31T18:30:00.000Z");
     assert.equal(instantMatchesCalendarYmd(istJune1MidnightUtc, "2026-06-01"), true);
+  });
+
+  it("monthly PATCH accepts targetYmd against shifted monthEndDate", () => {
+    const istMay31MidnightUtc = new Date("2026-05-30T18:30:00.000Z");
+    const monthEndYmd = getLastDateOfMonth("2026-05");
+    assert.equal(monthEndYmd, "2026-05-31");
+    assert.equal(instantMatchesCalendarYmd(istMay31MidnightUtc, monthEndYmd), true);
   });
 });

@@ -3,14 +3,14 @@ import { AddTask } from "../model/add-task.model";
 import { ReviewTask } from "../model/review-task.model";
 import {
   buildDatedSubTaskIdMap,
-  DATE_YMD_RE,
+  getLastDateOfMonth,
+  instantMatchesCalendarYmd,
   isAllowedDatedTaskDate,
   resolvePatchDateYmd,
 } from "../helper/dated-tasks.helper";
 import {
   findReviewSlotByYmd,
   indexReviewSlotByYmd,
-  isSameCalendarDay,
 } from "../helper/review-date.helper";
 import {
   AddTaskForReview,
@@ -170,10 +170,6 @@ const PatchReviewTaskCompletionService = async (
 ): Promise<unknown> => {
   const { type, date, dateYmd, subTaskId, isCompleted } = payload;
   const targetYmd = resolvePatchDateYmd({ dateYmd, date });
-  const targetDate =
-    date != null && !DATE_YMD_RE.test(String(date).trim())
-      ? new Date(date)
-      : new Date(`${targetYmd}T12:00:00`);
 
   const review = await ReviewTask.findOne({ _id: id, userId });
   if (!review) {
@@ -264,19 +260,49 @@ const PatchReviewTaskCompletionService = async (
       }
     }
   } else if (type === "weekly") {
-    for (const entry of review.WeeklyTasks) {
-      if (!isSameCalendarDay(entry.sundayDate, targetDate)) continue;
-      for (const task of entry.Task) {
+    const weeklyByYmd = indexReviewSlotByYmd(
+      review.WeeklyTasks,
+      (entry) => entry.sundayDate,
+    );
+    const weeklySlot = findReviewSlotByYmd(
+      review.WeeklyTasks,
+      weeklyByYmd,
+      targetYmd,
+      monthYear,
+      (entry) => entry.sundayDate,
+    );
+    const applyWeeklyCompletion = (
+      slot: (typeof review.WeeklyTasks)[number],
+    ): boolean => {
+      for (const task of slot.Task) {
         if (task.subTaskId.toString() === subTaskId) {
           task.isCompleted = isCompleted;
+          return true;
+        }
+      }
+      return false;
+    };
+    if (weeklySlot) {
+      updated = applyWeeklyCompletion(weeklySlot);
+    }
+    if (!updated) {
+      for (const entry of review.WeeklyTasks) {
+        if (applyWeeklyCompletion(entry)) {
           updated = true;
           break;
         }
       }
-      if (updated) break;
     }
   } else if (type === "monthly") {
-    if (isSameCalendarDay(review.MonthlyTasks.monthEndDate, targetDate)) {
+    const monthEndYmd = monthYear ? getLastDateOfMonth(monthYear) : "";
+    const monthMatches =
+      Boolean(monthEndYmd) &&
+      (targetYmd === monthEndYmd ||
+        instantMatchesCalendarYmd(
+          review.MonthlyTasks.monthEndDate,
+          targetYmd,
+        ));
+    if (monthMatches) {
       for (const task of review.MonthlyTasks.Task) {
         if (task.subTaskId.toString() === subTaskId) {
           task.isCompleted = isCompleted;
