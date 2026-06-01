@@ -64,4 +64,6 @@ const addTaskSchema = new Schema(
   { timestamps: true },
 );
 
+addTaskSchema.index({ userId: 1, currentMonthAndYear: 1 }, { unique: true });
+
 export const AddTask = model("AddTask", addTaskSchema);

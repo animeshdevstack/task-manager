@@ -7,7 +7,9 @@
     "dev": "nodemon",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/helper/review-sync.helper.test.ts"
+    "test": "tsx --test src/helper/review-sync.helper.test.ts",
+    "dedupe-plans": "node scripts/dedupe-addtasks.mjs",
+    "dedupe-plans:dry-run": "node scripts/dedupe-addtasks.mjs --dry-run"
   },
   "keywords": [],
   "author": "",

@@ -12,6 +12,8 @@ type TaskNameDoc = { _id: mongoose.Types.ObjectId; taskName: string };
 
 type DatedTaskDoc = { date: string; tasks: TaskNameDoc[] };
 
+const MONTH_YM_RE = /^\d{4}-\d{2}$/;
+
 const mapPlanItems = (items: TaskNameDoc[]) =>
   items.map((t) => ({ _id: t._id, taskName: t.taskName }));
 
@@ -79,12 +81,62 @@ const runWithTransaction = async <T>(
   }
 };
 
+const applyTaskPlanUpdate = async (
+  id: string,
+  userId: string,
+  monthYear: string,
+  data: {
+    DailyTasks: unknown;
+    WeeklyTasks: unknown;
+    MonthlyTasks: unknown;
+    DatedTasks?: unknown;
+  },
+  existingDatedTasks?: DatedTaskDoc[],
+): Promise<unknown> => {
+  const { DailyTasks, WeeklyTasks, MonthlyTasks } = data;
+  const DatedTasks = normalizeDatedTasks(
+    data.DatedTasks,
+    monthYear,
+    new Date(),
+    existingDatedTasks,
+  );
+
+  return runWithTransaction(async (session) => {
+    const updated = await AddTask.findOneAndUpdate(
+      { _id: id, userId },
+      { DailyTasks, WeeklyTasks, MonthlyTasks, DatedTasks },
+      { new: true, runValidators: true, ...(session ? { session } : {}) },
+    );
+    if (!updated) {
+      throw new Error("Task not found");
+    }
+
+    await syncReviewTaskFromAddTask(toAddTaskForReview(updated), session);
+    return updated;
+  });
+};
+
 const CreateTaskService = async (data: any, userId: string): Promise<any> => {
   try {
     const { DailyTasks, WeeklyTasks, MonthlyTasks } = data;
     const monthYear = formatCurrentMonthAndYear(new Date());
     assertCurrentMonthPlan(monthYear);
     const DatedTasks = normalizeDatedTasks(data.DatedTasks, monthYear);
+
+    const existing = await AddTask.findOne({
+      userId,
+      currentMonthAndYear: monthYear,
+    }).exec();
+
+    if (existing) {
+      return applyTaskPlanUpdate(
+        existing._id.toString(),
+        userId,
+        monthYear,
+        { DailyTasks, WeeklyTasks, MonthlyTasks, DatedTasks },
+        existing.DatedTasks,
+      );
+    }
 
     return await runWithTransaction(async (session) => {
       const created = await AddTask.create(
@@ -124,9 +176,31 @@ const MAX_LIMIT = 100;
 
 const GetTasksService = async (
   userId: string,
-  options: { page?: number; limit?: number } = {},
+  options: { page?: number; limit?: number; month?: string } = {},
 ): Promise<any> => {
   try {
+    if (options.month) {
+      if (!MONTH_YM_RE.test(options.month)) {
+        throw new Error("Invalid month format (YYYY-MM)");
+      }
+
+      const task = await AddTask.findOne({
+        userId,
+        currentMonthAndYear: options.month,
+      }).exec();
+
+      return {
+        task,
+        tasks: task ? [task] : [],
+        pagination: {
+          page: 1,
+          limit: 1,
+          total: task ? 1 : 0,
+          totalPages: task ? 1 : 0,
+        },
+      };
+    }
+
     const page = Math.max(1, Math.floor(options.page ?? DEFAULT_PAGE) || DEFAULT_PAGE);
     const limitRaw = Math.floor(options.limit ?? DEFAULT_LIMIT) || DEFAULT_LIMIT;
     const limit = Math.min(MAX_LIMIT, Math.max(1, limitRaw));
@@ -174,33 +248,19 @@ const GetTaskByIdService = async (id: string, userId: string): Promise<any> => {
 
 const UpdateTaskService = async (id: string, data: any, userId: string): Promise<any> => {
   try {
-    const { DailyTasks, WeeklyTasks, MonthlyTasks } = data;
-
     const existing = await AddTask.findOne({ _id: id, userId });
     if (!existing) {
       throw new Error("Task not found");
     }
     assertCurrentMonthPlan(existing.currentMonthAndYear);
-    const DatedTasks = normalizeDatedTasks(
-      data.DatedTasks,
+
+    return applyTaskPlanUpdate(
+      id,
+      userId,
       existing.currentMonthAndYear,
-      new Date(),
+      data,
       existing.DatedTasks,
     );
-
-    return await runWithTransaction(async (session) => {
-      const updated = await AddTask.findOneAndUpdate(
-        { _id: id, userId },
-        { DailyTasks, WeeklyTasks, MonthlyTasks, DatedTasks },
-        { new: true, runValidators: true, ...(session ? { session } : {}) },
-      );
-      if (!updated) {
-        throw new Error("Task not found");
-      }
-
-      await syncReviewTaskFromAddTask(toAddTaskForReview(updated), session);
-      return updated;
-    });
   } catch (error) {
     if (error instanceof Error) {
       throw new Error(error.message);
