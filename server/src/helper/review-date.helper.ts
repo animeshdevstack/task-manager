@@ -1,4 +1,8 @@
-import { formatDateYmd, formatDateYmdUtc } from "./dated-tasks.helper";
+import {
+  formatDateYmd,
+  formatDateYmdUtc,
+  instantMatchesCalendarYmd,
+} from "./dated-tasks.helper";
 
 export { formatDateYmdUtc };
 
@@ -67,7 +71,7 @@ export const findReviewSlotByYmd = <T>(
 
   return entries.find((entry) => {
     const d = getDateField(entry);
-    if (formatDateYmd(d) === ymd || formatDateYmdUtc(d) === ymd) return true;
+    if (instantMatchesCalendarYmd(d, ymd)) return true;
 
     const localMatch =
       d.getFullYear() === year &&

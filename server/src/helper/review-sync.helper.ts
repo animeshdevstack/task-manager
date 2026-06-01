@@ -1,5 +1,5 @@
 import { Types } from "mongoose";
-import { formatDateYmd } from "./dated-tasks.helper";
+import { DATE_YMD_RE } from "./dated-tasks.helper";
 import {
   findReviewSlotByYmd,
   getAllDaysInMonth,
@@ -31,21 +31,22 @@ export type ReviewSubTask = {
   isCompleted: boolean;
 };
 
-const getDatedPlanItemsForDate = (
+const getDatedPlanItemsForYmd = (
   datedTasks: DatedTaskEntry[],
-  dayDate: Date,
+  ymd: string,
 ): PlanTaskItem[] => {
-  const key = formatDateYmd(dayDate);
-  const entry = datedTasks.find((e) => e.date === key);
+  if (!DATE_YMD_RE.test(ymd)) return [];
+  const entry = datedTasks.find((e) => e.date === ymd);
   return entry?.tasks ?? [];
 };
 
-export const dailyPlanItemsForDate = (
+/** Plan items for a calendar day (regular daily + dated add-ons for `ymd`). */
+export const dailyPlanItemsForYmd = (
   addTaskDoc: AddTaskForReview,
-  dayDate: Date,
+  ymd: string,
 ): PlanTaskItem[] => [
   ...addTaskDoc.DailyTasks,
-  ...getDatedPlanItemsForDate(addTaskDoc.DatedTasks ?? [], dayDate),
+  ...getDatedPlanItemsForYmd(addTaskDoc.DatedTasks ?? [], ymd),
 ];
 
 export const buildSubTasksFromPlan = (items: PlanTaskItem[]): ReviewSubTask[] =>
@@ -115,9 +116,9 @@ export const buildReviewPayloadFromAddTask = (addTaskDoc: AddTaskForReview) => {
     userId: addTaskDoc.userId,
     TaskId: addTaskDoc._id,
     currentMonthAndYear: monthYear,
-    DailyTasks: getAllDaysInMonth(monthYear).map(({ date }) => ({
+    DailyTasks: getAllDaysInMonth(monthYear).map(({ date, ymd }) => ({
       todayDate: date,
-      Task: mergeSubTasksWithExisting(dailyPlanItemsForDate(addTaskDoc, date), []),
+      Task: mergeSubTasksWithExisting(dailyPlanItemsForYmd(addTaskDoc, ymd), []),
     })),
     WeeklyTasks: getAllSundaysInMonth(monthYear).map(({ date }) => ({
       sundayDate: date,
@@ -161,7 +162,7 @@ export const buildSyncedReviewUpdate = (
       return {
         todayDate: date,
         Task: mergeSubTasksWithExisting(
-          dailyPlanItemsForDate(addTaskDoc, date),
+          dailyPlanItemsForYmd(addTaskDoc, ymd),
           prev ? toReviewSubTasks(prev.Task) : [],
         ),
       };

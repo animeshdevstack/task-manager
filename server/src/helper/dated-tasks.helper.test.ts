@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  instantMatchesCalendarYmd,
   matchesCalendarYmd,
   parsePatchDateYmd,
   resolvePatchDateYmd,
@@ -24,5 +25,10 @@ describe("dated-tasks.helper", () => {
   it("matchesCalendarYmd when local and UTC YMD agree", () => {
     const noonUtc = new Date("2026-06-01T12:00:00.000Z");
     assert.equal(matchesCalendarYmd(noonUtc, "2026-06-01"), true);
+  });
+
+  it("instantMatchesCalendarYmd matches IST-midnight stored as prior UTC evening", () => {
+    const istJune1MidnightUtc = new Date("2026-05-31T18:30:00.000Z");
+    assert.equal(instantMatchesCalendarYmd(istJune1MidnightUtc, "2026-06-01"), true);
   });
 });

@@ -16,6 +16,7 @@ import {
   AddTaskForReview,
   buildReviewPayloadFromAddTask,
   buildSyncedReviewUpdate,
+  dailyPlanItemsForYmd,
   toReviewSubTasks,
 } from "../helper/review-sync.helper";
 
@@ -213,13 +214,53 @@ const PatchReviewTaskCompletionService = async (
       monthYear,
       (entry) => entry.todayDate,
     );
-    if (dailySlot) {
-      for (const task of dailySlot.Task) {
+    const applyCompletionInSlot = (
+      slot: (typeof review.DailyTasks)[number],
+    ): boolean => {
+      for (const task of slot.Task) {
         if (task.subTaskId.toString() === subTaskId) {
           task.isCompleted = isCompleted;
+          return true;
+        }
+      }
+      return false;
+    };
+
+    if (dailySlot) {
+      updated = applyCompletionInSlot(dailySlot);
+    }
+
+    // Dated add-on may live on a legacy-shifted slot or was never merged into review.
+    if (!updated && scheduledDatedDate) {
+      for (const entry of review.DailyTasks) {
+        if (applyCompletionInSlot(entry)) {
           updated = true;
           break;
         }
+      }
+    }
+
+    const slotForHeal =
+      dailySlot ??
+      findReviewSlotByYmd(
+        review.DailyTasks,
+        dailyByYmd,
+        targetYmd,
+        monthYear,
+        (entry) => entry.todayDate,
+      );
+    if (!updated && scheduledDatedDate && addTask && slotForHeal) {
+      const planItem = dailyPlanItemsForYmd(
+        addTask as AddTaskForReview,
+        targetYmd,
+      ).find((item) => item._id.toString() === subTaskId);
+      if (planItem) {
+        slotForHeal.Task.push({
+          subTaskId: planItem._id,
+          subTaskName: planItem.taskName,
+          isCompleted,
+        });
+        updated = true;
       }
     }
   } else if (type === "weekly") {
