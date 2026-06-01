@@ -29,6 +29,35 @@ export function matchesCalendarYmd(d, ymd) {
   return t >= startMs && t < endMs
 }
 
+export function ymdFromParts(year, monthIndex, day) {
+  const m = String(monthIndex + 1).padStart(2, '0')
+  const d = String(day).padStart(2, '0')
+  return `${year}-${m}-${d}`
+}
+
+export function dayYmdInMonth(monthKey, day) {
+  return `${monthKey}-${String(day).padStart(2, '0')}`
+}
+
+export function sundayYmdsInMonth(monthKey) {
+  const [year, monthNum] = monthKey.split('-').map(Number)
+  const monthIndex = monthNum - 1
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate()
+  const sundays = []
+  for (let d = 1; d <= daysInMonth; d++) {
+    if (new Date(year, monthIndex, d).getDay() === 0) {
+      sundays.push(ymdFromParts(year, monthIndex, d))
+    }
+  }
+  return sundays
+}
+
+export function resolveYmdForInstant(instant, candidateYmds) {
+  const d = instant instanceof Date ? instant : new Date(instant)
+  if (Number.isNaN(d.getTime())) return undefined
+  return candidateYmds.find((ymd) => matchesCalendarYmd(d, ymd))
+}
+
 export function monthDateBounds(monthKey) {
   const [year, monthNum] = monthKey.split('-').map(Number)
   const lastDay = new Date(year, monthNum, 0).getDate()
