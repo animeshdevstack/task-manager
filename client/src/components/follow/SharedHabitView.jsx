@@ -2,11 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   CalendarDays,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Circle,
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import DatedDatePicker from '@/components/tasks/DatedDatePicker'
+import MonthNavBar, { addMonths } from '@/components/tasks/MonthNavBar'
 import {
   Card,
   CardContent,
@@ -14,6 +13,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  buildDatedSubTaskMap,
+  defaultSelectedDateForMonth,
+  formatDateYmd,
+  monthDateBounds,
+  shiftDateYmd,
+} from '@/lib/dated-tasks'
 import { followRequest } from '@/lib/follow-api'
 import { cn } from '@/lib/utils'
 
@@ -39,46 +45,10 @@ function startOfDay(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate())
 }
 
-function addMonths(date, delta) {
-  return new Date(date.getFullYear(), date.getMonth() + delta, 1)
-}
-
 function isDateInMonth(date, viewMonth) {
   const d = new Date(date)
   return (
     d.getFullYear() === viewMonth.getFullYear() && d.getMonth() === viewMonth.getMonth()
-  )
-}
-
-function MonthNavBar({ viewMonth, onPrev, onNext, children, disabled }) {
-  return (
-    <div className="flex shrink-0 items-center justify-between gap-2 rounded-lg border border-violet-200/80 bg-white/80 px-1.5 py-1.5 dark:border-violet-800/50 dark:bg-slate-900/50">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="h-8 shrink-0 gap-1 px-2 text-xs"
-        disabled={disabled}
-        onClick={onPrev}
-      >
-        <ChevronLeft className="h-4 w-4" />
-        <span className="hidden sm:inline">Prev</span>
-      </Button>
-      <div className="min-w-0 flex-1 px-1 text-center text-xs text-slate-600 dark:text-slate-400">
-        {children}
-      </div>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="h-8 shrink-0 gap-1 px-2 text-xs"
-        disabled={disabled}
-        onClick={onNext}
-      >
-        <span className="hidden sm:inline">Next</span>
-        <ChevronRight className="h-4 w-4" />
-      </Button>
-    </div>
   )
 }
 
@@ -107,6 +77,14 @@ const TABS = [
     ring: 'ring-indigo-400/40',
     bg: 'bg-indigo-50/80 dark:bg-indigo-950/30',
   },
+  {
+    key: 'dated',
+    title: 'add-ons habits',
+    description: 'Read-only view',
+    accent: 'from-sky-500 to-blue-500',
+    ring: 'ring-sky-400/40',
+    bg: 'bg-sky-50/80 dark:bg-sky-950/30',
+  },
 ]
 
 function userIdStr(id) {
@@ -117,17 +95,35 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [review, setReview] = useState(null)
+  const [plan, setPlan] = useState(null)
   const [hasPlan, setHasPlan] = useState(false)
   const [activeTab, setActiveTab] = useState('daily')
   const [viewMonth, setViewMonth] = useState(() => {
     const now = new Date()
     return new Date(now.getFullYear(), now.getMonth(), 1)
   })
+  const [selectedHabitDate, setSelectedHabitDate] = useState(() =>
+    defaultSelectedDateForMonth(formatYearMonth(new Date()), new Date()),
+  )
 
   const today = useMemo(() => new Date(), [])
   const monthKey = useMemo(() => formatYearMonth(viewMonth), [viewMonth])
   const monthTitle = useMemo(() => formatMonthTitle(viewMonth), [viewMonth])
   const isViewingCurrentMonth = monthKey === formatYearMonth(today)
+  const viewMonthBounds = useMemo(() => monthDateBounds(monthKey), [monthKey])
+
+  const datedSubTaskMap = useMemo(
+    () => buildDatedSubTaskMap(plan?.DatedTasks),
+    [plan],
+  )
+
+  useEffect(() => {
+    setSelectedHabitDate((prev) => {
+      const { min, max } = viewMonthBounds
+      if (prev >= min && prev <= max) return prev
+      return defaultSelectedDateForMonth(monthKey, today)
+    })
+  }, [monthKey, today, viewMonthBounds])
 
   const loadShared = useCallback(async () => {
     if (!targetUserId) return
@@ -138,13 +134,15 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
       const planRes = await followRequest(
         `/${encodeURIComponent(uid)}/add-tasks?month=${encodeURIComponent(monthKey)}`,
       )
-      const plan = planRes.data
-      if (!plan?._id) {
+      const planData = planRes.data
+      if (!planData?._id) {
         setHasPlan(false)
+        setPlan(null)
         setReview(null)
         return
       }
       setHasPlan(true)
+      setPlan(planData)
 
       const reviewRes = await followRequest(
         `/${encodeURIComponent(uid)}/review-tasks?month=${encodeURIComponent(monthKey)}`,
@@ -153,6 +151,7 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load shared habits')
       setHasPlan(false)
+      setPlan(null)
       setReview(null)
     } finally {
       setLoading(false)
@@ -184,6 +183,7 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
     for (const entry of review.DailyTasks) {
       for (const t of entry.Task ?? []) {
         const id = t.subTaskId?.toString?.() ?? String(t.subTaskId)
+        if (datedSubTaskMap.has(id)) continue
         if (!taskMap.has(id)) taskMap.set(id, t.subTaskName)
       }
     }
@@ -201,7 +201,24 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
 
     const todayDay = isViewingCurrentMonth ? today.getDate() : null
     return { days, tasks, getCell, todayDay, isViewingCurrentMonth }
-  }, [review, monthKey, today, isViewingCurrentMonth])
+  }, [review, monthKey, today, isViewingCurrentMonth, datedSubTaskMap])
+
+  const datedTasksForSelectedDate = useMemo(() => {
+    if (!review?.DailyTasks?.length) return []
+    const slot = review.DailyTasks.find((entry) => {
+      const d = new Date(entry.todayDate)
+      return formatDateYmd(d) === selectedHabitDate
+    })
+    const datedIdsForDay = new Set(
+      [...datedSubTaskMap.entries()]
+        .filter(([, dateYmd]) => dateYmd === selectedHabitDate)
+        .map(([id]) => id),
+    )
+    return (slot?.Task ?? []).filter((t) => {
+      const id = t.subTaskId?.toString?.() ?? String(t.subTaskId)
+      return datedIdsForDay.has(id)
+    })
+  }, [review, selectedHabitDate, datedSubTaskMap])
 
   const filteredWeeklySlots = useMemo(() => {
     return (review?.WeeklyTasks ?? [])
@@ -285,8 +302,12 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
           <MonthNavBar
             viewMonth={viewMonth}
             onPrev={() => setViewMonth((m) => addMonths(m, -1))}
-            onNext={() => setViewMonth((m) => addMonths(m, 1))}
+            onNext={() => {
+              if (isViewingCurrentMonth) return
+              setViewMonth((m) => addMonths(m, 1))
+            }}
             disabled={loading}
+            nextDisabled={isViewingCurrentMonth}
           >
             <span className="inline-flex items-center justify-center gap-1">
               <CalendarDays className="h-3.5 w-3.5" />
@@ -402,7 +423,57 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
                 </table>
               </div>
             )
-          ) : monthlySlot?.Task?.length ? (
+          ) : activeTab === 'dated' ? (
+            <>
+              <DatedDatePicker
+                id="shared-habit-dated-date"
+                value={selectedHabitDate}
+                min={viewMonthBounds.min}
+                max={viewMonthBounds.max}
+                disabled={loading}
+                prevDisabled={selectedHabitDate <= viewMonthBounds.min}
+                nextDisabled={selectedHabitDate >= viewMonthBounds.max}
+                onPrev={() => setSelectedHabitDate(shiftDateYmd(selectedHabitDate, -1))}
+                onNext={() => setSelectedHabitDate(shiftDateYmd(selectedHabitDate, 1))}
+                onChange={(e) => {
+                  const value = e.target.value
+                  if (!value) return
+                  if (value < viewMonthBounds.min || value > viewMonthBounds.max) return
+                  setSelectedHabitDate(value)
+                }}
+              />
+              {!datedTasksForSelectedDate.length ? (
+                <p className="py-6 text-center text-xs text-slate-500">
+                  No add-ons for this day
+                </p>
+              ) : (
+                <ul className="space-y-1.5 rounded-lg border border-white/80 bg-white/70 p-2 dark:bg-slate-900/40">
+                  {datedTasksForSelectedDate.map((task) => {
+                    const id = task.subTaskId?.toString?.() ?? String(task.subTaskId)
+                    return (
+                      <li
+                        key={id}
+                        className="flex items-center gap-2 rounded-md bg-white/60 px-2 py-1.5 text-sm dark:bg-slate-800/60"
+                      >
+                        {task.isCompleted ? (
+                          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+                        ) : (
+                          <Circle className="h-4 w-4 shrink-0 text-slate-300" />
+                        )}
+                        <span
+                          className={cn(
+                            task.isCompleted && 'line-through text-emerald-800/80',
+                          )}
+                        >
+                          {task.subTaskName}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </>
+          ) : activeTab === 'monthly' && monthlySlot?.Task?.length ? (
             <ul className="space-y-1.5 rounded-lg border border-white/80 bg-white/70 p-2 dark:bg-slate-900/40">
               {monthlySlot.Task.map((task) => {
                 const id = task.subTaskId?.toString?.() ?? String(task.subTaskId)
