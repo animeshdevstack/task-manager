@@ -9,6 +9,11 @@ import {
 import AppPageHeader from '@/components/layout/AppPageHeader'
 import DatedDatePicker from '@/components/tasks/DatedDatePicker'
 import MonthNavBar, { addMonths } from '@/components/tasks/MonthNavBar'
+import TaskListPagination, {
+  paginateSlice,
+  totalPages,
+  useTasksPerPage,
+} from '@/components/tasks/TaskListPagination'
 import { Button } from '@/components/ui/button'
 import { Toast, TOAST_DURATION_MS } from '@/components/ui/toast'
 import {
@@ -19,6 +24,13 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { clearSession, getStoredUser } from '@/lib/auth-api'
+import {
+  buildDatedSubTaskMap,
+  defaultSelectedDateForMonth,
+  formatDateYmd,
+  monthDateBounds,
+  shiftDateYmd,
+} from '@/lib/dated-tasks'
 import { reviewRequest } from '@/lib/review-api'
 import { tasksRequest } from '@/lib/tasks-api'
 import { cn } from '@/lib/utils'
@@ -53,47 +65,6 @@ function startOfDay(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate())
 }
 
-function formatDateYmd(d) {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-function monthDateBounds(monthKey) {
-  const [year, monthNum] = monthKey.split('-').map(Number)
-  const lastDay = new Date(year, monthNum, 0).getDate()
-  return {
-    min: `${monthKey}-01`,
-    max: `${monthKey}-${String(lastDay).padStart(2, '0')}`,
-  }
-}
-
-function defaultHabitSelectedDate(monthKey, referenceDate) {
-  const { min, max } = monthDateBounds(monthKey)
-  const todayStr = formatDateYmd(referenceDate)
-  if (todayStr >= min && todayStr <= max) return todayStr
-  return min
-}
-
-function shiftDateYmd(ymd, deltaDays) {
-  const [y, m, d] = ymd.split('-').map(Number)
-  return formatDateYmd(new Date(y, m - 1, d + deltaDays))
-}
-
-function buildDatedSubTaskMap(datedTasks) {
-  const map = new Map()
-  for (const entry of datedTasks ?? []) {
-    const date = typeof entry?.date === 'string' ? entry.date.trim() : ''
-    if (!date) continue
-    for (const t of entry?.tasks ?? []) {
-      const id = t._id?.toString?.() ?? (t._id != null ? String(t._id) : null)
-      if (id) map.set(id, date)
-    }
-  }
-  return map
-}
-
 function isDateInMonth(date, viewMonth) {
   const d = new Date(date)
   return (
@@ -109,7 +80,9 @@ function planIdMatches(reviewTaskId, planId) {
 }
 
 const HABIT_TRACKER_TAB_KEY = 'habit-tracker-active-tab'
+const HABIT_TRACKER_PAGE_KEY = 'habit-tracker-list-pages'
 const VALID_TABS = new Set(['daily', 'weekly', 'monthly', 'dated'])
+const DEFAULT_LIST_PAGE = { daily: 1, weekly: 1, monthly: 1, dated: 1 }
 
 function getStoredHabitTab() {
   try {
@@ -119,6 +92,22 @@ function getStoredHabitTab() {
     /* ignore */
   }
   return 'daily'
+}
+
+function getStoredListPages() {
+  try {
+    const raw = sessionStorage.getItem(HABIT_TRACKER_PAGE_KEY)
+    if (!raw) return { ...DEFAULT_LIST_PAGE }
+    const parsed = JSON.parse(raw)
+    const out = { ...DEFAULT_LIST_PAGE }
+    for (const key of ['daily', 'weekly', 'monthly', 'dated']) {
+      const n = Number(parsed?.[key])
+      if (Number.isFinite(n) && n >= 1) out[key] = Math.floor(n)
+    }
+    return out
+  } catch {
+    return { ...DEFAULT_LIST_PAGE }
+  }
 }
 
 const TABS = [
@@ -166,6 +155,8 @@ export default function HabitTracker() {
   const [plan, setPlan] = useState(null)
   const [hasPlan, setHasPlan] = useState(false)
   const [activeTab, setActiveTab] = useState(getStoredHabitTab)
+  const [listPage, setListPage] = useState(getStoredListPages)
+  const tasksPerPage = useTasksPerPage()
 
   useEffect(() => {
     try {
@@ -174,6 +165,14 @@ export default function HabitTracker() {
       /* ignore */
     }
   }, [activeTab])
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(HABIT_TRACKER_PAGE_KEY, JSON.stringify(listPage))
+    } catch {
+      /* ignore */
+    }
+  }, [listPage])
   const [viewMonth, setViewMonth] = useState(() => {
     const now = new Date()
     return new Date(now.getFullYear(), now.getMonth(), 1)
@@ -190,7 +189,7 @@ export default function HabitTracker() {
   const todayYmd = useMemo(() => formatDateYmd(today), [today])
   const viewMonthBounds = useMemo(() => monthDateBounds(monthKey), [monthKey])
   const [selectedHabitDate, setSelectedHabitDate] = useState(() =>
-    defaultHabitSelectedDate(formatYearMonth(new Date()), new Date()),
+    defaultSelectedDateForMonth(formatYearMonth(new Date()), new Date()),
   )
 
   const datedSubTaskMap = useMemo(
@@ -202,7 +201,7 @@ export default function HabitTracker() {
     setSelectedHabitDate((prev) => {
       const { min, max } = monthDateBounds(monthKey)
       if (prev >= min && prev <= max) return prev
-      return defaultHabitSelectedDate(monthKey, today)
+      return defaultSelectedDateForMonth(monthKey, today)
     })
   }, [monthKey, today])
 
@@ -533,6 +532,76 @@ export default function HabitTracker() {
     return { done, total: tasks.length, pct: Math.round((done / tasks.length) * 100) }
   }, [activeTasks])
 
+  const datedHabitTaskCount = useMemo(() => {
+    if (!review) return 0
+    const slot = review.DailyTasks?.find((entry) => {
+      const d = new Date(entry.todayDate)
+      return formatDateYmd(d) === selectedHabitDate
+    })
+    const datedIdsForDay = new Set(
+      [...datedSubTaskMap.entries()]
+        .filter(([, dateYmd]) => dateYmd === selectedHabitDate)
+        .map(([id]) => id),
+    )
+    return (slot?.Task ?? []).filter((t) => {
+      const id = t.subTaskId?.toString?.() ?? String(t.subTaskId)
+      return datedIdsForDay.has(id)
+    }).length
+  }, [review, selectedHabitDate, datedSubTaskMap])
+
+  const tabTaskCounts = useMemo(
+    () => ({
+      daily: dailyGrid.tasks.length,
+      weekly: weeklyGrid.tasks.length,
+      monthly: monthlySlot?.Task?.length ?? 0,
+      dated: datedHabitTaskCount,
+    }),
+    [
+      dailyGrid.tasks.length,
+      weeklyGrid.tasks.length,
+      monthlySlot?.Task?.length,
+      datedHabitTaskCount,
+    ],
+  )
+
+  useEffect(() => {
+    setListPage((prev) => ({
+      daily: Math.min(prev.daily, totalPages(tabTaskCounts.daily, tasksPerPage)),
+      weekly: Math.min(prev.weekly, totalPages(tabTaskCounts.weekly, tasksPerPage)),
+      monthly: Math.min(prev.monthly, totalPages(tabTaskCounts.monthly, tasksPerPage)),
+      dated: Math.min(prev.dated, totalPages(tabTaskCounts.dated, tasksPerPage)),
+    }))
+  }, [tasksPerPage, tabTaskCounts])
+
+  function goToPage(section, nextPage) {
+    const max = totalPages(tabTaskCounts[section] ?? 0, tasksPerPage)
+    setListPage((p) => ({
+      ...p,
+      [section]: Math.max(1, Math.min(max, nextPage)),
+    }))
+  }
+
+  const paginatedDailyTasks = useMemo(
+    () => paginateSlice(dailyGrid.tasks, listPage.daily, tasksPerPage),
+    [dailyGrid.tasks, listPage.daily, tasksPerPage],
+  )
+
+  const paginatedWeeklyTasks = useMemo(
+    () => paginateSlice(weeklyGrid.tasks, listPage.weekly, tasksPerPage),
+    [weeklyGrid.tasks, listPage.weekly, tasksPerPage],
+  )
+
+  const paginatedListTasks = useMemo(() => {
+    const tasks = activeTasks?.tasks ?? []
+    if (activeTab === 'monthly') {
+      return paginateSlice(tasks, listPage.monthly, tasksPerPage)
+    }
+    if (activeTab === 'dated') {
+      return paginateSlice(tasks, listPage.dated, tasksPerPage)
+    }
+    return tasks
+  }, [activeTasks, activeTab, listPage.monthly, listPage.dated, tasksPerPage])
+
   useEffect(() => {
     if (activeTab !== 'daily' || loading || !review || !dailyGrid.isViewingCurrentMonth) return
     todayColumnRef.current?.scrollIntoView({
@@ -540,7 +609,7 @@ export default function HabitTracker() {
       block: 'nearest',
       inline: 'center',
     })
-  }, [activeTab, loading, review, dailyGrid.todayDay, dailyGrid.isViewingCurrentMonth])
+  }, [activeTab, loading, monthKey, dailyGrid.todayDay, dailyGrid.isViewingCurrentMonth])
 
   useEffect(() => {
     if (activeTab !== 'weekly' || loading || !review || weeklyGrid.highlightIndex == null) return
@@ -549,7 +618,7 @@ export default function HabitTracker() {
       block: 'nearest',
       inline: 'center',
     })
-  }, [activeTab, loading, review, weeklyGrid.highlightIndex])
+  }, [activeTab, loading, monthKey, weeklyGrid.highlightIndex])
 
   const monthNavHint = useMemo(() => {
     if (activeTab === 'daily') {
@@ -816,7 +885,7 @@ export default function HabitTracker() {
                           </tr>
                         </thead>
                         <tbody>
-                          {weeklyGrid.tasks.map((task) => (
+                          {paginatedWeeklyTasks.map((task) => (
                             <tr
                               key={task.id}
                               className="border-b border-emerald-100/80 last:border-0 dark:border-emerald-900/50"
@@ -887,6 +956,14 @@ export default function HabitTracker() {
                       </table>
                     </div>
                   )}
+                  <TaskListPagination
+                    sectionKey="Weekly habits"
+                    tasks={weeklyGrid.tasks}
+                    page={listPage.weekly}
+                    pages={totalPages(weeklyGrid.tasks.length, tasksPerPage)}
+                    disabled={loading || patching}
+                    onPageChange={(p) => goToPage('weekly', p)}
+                  />
                 </>
               ) : activeTab === 'daily' ? (
                 <>
@@ -923,7 +1000,7 @@ export default function HabitTracker() {
                           </tr>
                         </thead>
                         <tbody>
-                          {dailyGrid.tasks.map((task) => (
+                          {paginatedDailyTasks.map((task) => (
                             <tr
                               key={task.id}
                               className="border-b border-rose-100/80 last:border-0 dark:border-rose-900/50"
@@ -999,6 +1076,14 @@ export default function HabitTracker() {
                       </table>
                     </div>
                   )}
+                  <TaskListPagination
+                    sectionKey="Daily habits"
+                    tasks={dailyGrid.tasks}
+                    page={listPage.daily}
+                    pages={totalPages(dailyGrid.tasks.length, tasksPerPage)}
+                    disabled={loading || patching}
+                    onPageChange={(p) => goToPage('daily', p)}
+                  />
                 </>
               ) : activeTab === 'dated' ? (
                 <>
@@ -1033,7 +1118,7 @@ export default function HabitTracker() {
                         No daily extras for this day
                       </li>
                     ) : (
-                      activeTasks.tasks.map((task) => {
+                      paginatedListTasks.map((task) => {
                         const id = task.subTaskId?.toString?.() ?? String(task.subTaskId)
                         const canEdit = activeTasks.canEdit !== false
 
@@ -1111,6 +1196,14 @@ export default function HabitTracker() {
                       })
                     )}
                   </ul>
+                  <TaskListPagination
+                    sectionKey="Add-ons"
+                    tasks={activeTasks?.tasks ?? []}
+                    page={listPage.dated}
+                    pages={totalPages(datedHabitTaskCount, tasksPerPage)}
+                    disabled={loading || patching}
+                    onPageChange={(p) => goToPage('dated', p)}
+                  />
                 </>
               ) : (
                 <>
@@ -1126,7 +1219,7 @@ export default function HabitTracker() {
                         No habits in this section yet
                       </li>
                     ) : (
-                      activeTasks.tasks.map((task) => {
+                      paginatedListTasks.map((task) => {
                         const id = task.subTaskId?.toString?.() ?? String(task.subTaskId)
                         const canEdit = activeTasks.canEdit !== false
 
@@ -1192,6 +1285,14 @@ export default function HabitTracker() {
                       })
                     )}
                   </ul>
+                  <TaskListPagination
+                    sectionKey="Monthly habits"
+                    tasks={activeTasks?.tasks ?? []}
+                    page={listPage.monthly}
+                    pages={totalPages(tabTaskCounts.monthly, tasksPerPage)}
+                    disabled={loading || patching}
+                    onPageChange={(p) => goToPage('monthly', p)}
+                  />
                 </>
               )}
                 </>
