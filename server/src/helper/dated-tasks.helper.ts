@@ -20,6 +20,33 @@ export const matchesCalendarYmd = (d: Date, ymd: string): boolean =>
   formatDateYmd(d) === ymd || formatDateYmdUtc(d) === ymd;
 
 /**
+ * Inclusive UTC-ms range covering any instant that can represent `ymd` on Earth
+ * (offsets UTC−12 … UTC+14). Handles legacy slots stored as local-midnight ISO.
+ */
+export const ymdToInstantRange = (
+  ymd: string,
+): { startMs: number; endMs: number } => {
+  const [y, m, d] = ymd.split("-").map(Number);
+  if (!y || !m || !d) {
+    throw new Error(`Invalid YMD: ${ymd}`);
+  }
+  const dayStartUtc = Date.UTC(y, m - 1, d, 0, 0, 0, 0);
+  const nextDayStartUtc = Date.UTC(y, m - 1, d + 1, 0, 0, 0, 0);
+  return {
+    startMs: dayStartUtc - 14 * 60 * 60 * 1000,
+    endMs: nextDayStartUtc + 12 * 60 * 60 * 1000,
+  };
+};
+
+/** True when `d` can represent calendar day `ymd` (dual YMD or offset-shifted instant). */
+export const instantMatchesCalendarYmd = (d: Date, ymd: string): boolean => {
+  if (matchesCalendarYmd(d, ymd)) return true;
+  const { startMs, endMs } = ymdToInstantRange(ymd);
+  const t = d.getTime();
+  return t >= startMs && t < endMs;
+};
+
+/**
  * Canonical calendar day for PATCH payloads.
  * Prefer explicit YYYY-MM-DD from the client; otherwise derive from an ISO instant.
  */

@@ -12,8 +12,21 @@ export function formatDateYmdUtc(d) {
   return `${y}-${m}-${day}`
 }
 
+export function ymdToInstantRange(ymd) {
+  const [y, m, d] = ymd.split('-').map(Number)
+  const dayStartUtc = Date.UTC(y, m - 1, d, 0, 0, 0, 0)
+  const nextDayStartUtc = Date.UTC(y, m - 1, d + 1, 0, 0, 0, 0)
+  return {
+    startMs: dayStartUtc - 14 * 60 * 60 * 1000,
+    endMs: nextDayStartUtc + 12 * 60 * 60 * 1000,
+  }
+}
+
 export function matchesCalendarYmd(d, ymd) {
-  return formatDateYmd(d) === ymd || formatDateYmdUtc(d) === ymd
+  if (formatDateYmd(d) === ymd || formatDateYmdUtc(d) === ymd) return true
+  const { startMs, endMs } = ymdToInstantRange(ymd)
+  const t = d.getTime()
+  return t >= startMs && t < endMs
 }
 
 export function monthDateBounds(monthKey) {
