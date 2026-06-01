@@ -295,6 +295,8 @@ export default function HabitTracker() {
         body: JSON.stringify({
           type,
           dateYmd,
+          // Legacy servers require `date`; noon local keeps slot matching stable.
+          date: `${dateYmd}T12:00:00`,
           subTaskId: typeof subTaskId === 'string' ? subTaskId : subTaskId.toString(),
           isCompleted: nextCompleted,
         }),
