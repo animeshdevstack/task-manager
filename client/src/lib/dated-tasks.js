@@ -5,6 +5,17 @@ export function formatDateYmd(d) {
   return `${y}-${m}-${day}`
 }
 
+export function formatDateYmdUtc(d) {
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+export function matchesCalendarYmd(d, ymd) {
+  return formatDateYmd(d) === ymd || formatDateYmdUtc(d) === ymd
+}
+
 export function monthDateBounds(monthKey) {
   const [year, monthNum] = monthKey.split('-').map(Number)
   const lastDay = new Date(year, monthNum, 0).getDate()

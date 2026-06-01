@@ -114,6 +114,7 @@ export const buildReviewPayloadFromAddTask = (addTaskDoc: AddTaskForReview) => {
   return {
     userId: addTaskDoc.userId,
     TaskId: addTaskDoc._id,
+    currentMonthAndYear: monthYear,
     DailyTasks: getAllDaysInMonth(monthYear).map(({ date }) => ({
       todayDate: date,
       Task: mergeSubTasksWithExisting(dailyPlanItemsForDate(addTaskDoc, date), []),

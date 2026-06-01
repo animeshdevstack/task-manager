@@ -1,4 +1,6 @@
-import { formatDateYmd } from "./dated-tasks.helper";
+import { formatDateYmd, formatDateYmdUtc } from "./dated-tasks.helper";
+
+export { formatDateYmdUtc };
 
 /** Parse "YYYY-MM" into year and 0-based month index. */
 export const parseMonthYear = (
@@ -25,14 +27,6 @@ export const formatDateYmdFromParts = (
   const m = String(monthIndex + 1).padStart(2, "0");
   const d = String(day).padStart(2, "0");
   return `${year}-${m}-${d}`;
-};
-
-/** UTC-based YMD for legacy Mongo dates stored with UTC offset shifts. */
-export const formatDateYmdUtc = (d: Date): string => {
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
 };
 
 /** Index review slots by local and UTC YMD so legacy stored dates still match. */
