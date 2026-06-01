@@ -38,9 +38,11 @@ const GetTasks = async (req: Request, res: Response) => {
     }
     const pageNum = Number(req.query.page);
     const limitNum = Number(req.query.limit);
+    const month = typeof req.query.month === "string" ? req.query.month : undefined;
     const data = await GetTasksService(userId, {
       page: Number.isFinite(pageNum) && pageNum >= 1 ? pageNum : undefined,
       limit: Number.isFinite(limitNum) && limitNum >= 1 ? limitNum : undefined,
+      month,
     });
     res.status(200).json({
       success: true,

@@ -270,6 +270,17 @@ function clonePlanTasks(arr) {
   }))
 }
 
+function planFromTasksResponse(data) {
+  return data?.task ?? data?.tasks?.[0] ?? null
+}
+
+async function fetchPlanForMonth(monthKey) {
+  const res = await tasksRequest(
+    `/get-tasks?month=${encodeURIComponent(monthKey)}`,
+  )
+  return planFromTasksResponse(res.data)
+}
+
 export default function TaskManager() {
   const navigate = useNavigate()
   const tasksPerPage = useTasksPerPage()
@@ -399,10 +410,8 @@ export default function TaskManager() {
     async function loadMonthPlan() {
       setLoading(true)
       try {
-        const res = await tasksRequest('/get-tasks?page=1&limit=50')
+        const hit = await fetchPlanForMonth(monthKey)
         if (cancelled) return
-        const list = res.data?.tasks ?? []
-        const hit = list.find((t) => t.currentMonthAndYear === monthKey)
         if (hit?._id) {
           setExistingId(hit._id)
           setDailyTasks(fromDocTasks(hit.DailyTasks))
@@ -498,9 +507,7 @@ export default function TaskManager() {
   }
 
   async function refetchMonthPlan(options = {}) {
-    const res = await tasksRequest('/get-tasks?page=1&limit=50')
-    const list = res.data?.tasks ?? []
-    const hit = list.find((t) => t.currentMonthAndYear === monthKey)
+    const hit = await fetchPlanForMonth(monthKey)
     applyPlanFromHit(hit, options)
     return hit
   }
@@ -526,6 +533,9 @@ export default function TaskManager() {
   async function persistLists(lists, options = {}) {
     if (!canEdit) {
       throw new Error('Tasks can only be modified for the current month')
+    }
+    if (loading) {
+      throw new Error('Still loading your plan. Please try again.')
     }
 
     const body = buildPayload(lists)
@@ -742,13 +752,13 @@ export default function TaskManager() {
       showToast('Tasks can only be modified for the current month', 'error')
       return
     }
+    if (loading) {
+      showToast('Still loading your plan. Please try again.', 'error')
+      return
+    }
     setCloning(true)
     try {
-      const res = await tasksRequest('/get-tasks?page=1&limit=50')
-      const list = res.data?.tasks ?? []
-      const prevHit = list.find(
-        (t) => t.currentMonthAndYear === previousMonthKey(currentMonthKey),
-      )
+      const prevHit = await fetchPlanForMonth(previousMonthKey(currentMonthKey))
 
       if (!prevHit) {
         showToast(`No plan found for ${prevMonthTitle}.`, 'error')
