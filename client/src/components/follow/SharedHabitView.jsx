@@ -21,6 +21,7 @@ import {
   shiftDateYmd,
 } from '@/lib/dated-tasks'
 import { followRequest } from '@/lib/follow-api'
+import { getHabitRowTheme } from '@/lib/daily-grid-theme'
 import { cn } from '@/lib/utils'
 
 function formatYearMonth(d) {
@@ -263,12 +264,12 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
   if (!targetUserId) return null
 
   return (
-    <div className="mt-3 space-y-2">
-      <p className="text-xs font-medium text-violet-900/90 dark:text-violet-200/90">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+      <p className="shrink-0 text-xs font-medium text-violet-900/90 dark:text-violet-200/90">
         Viewing habits for <span className="font-semibold">{userLabel}</span> (read-only)
       </p>
 
-      <div className="flex gap-1 rounded-lg bg-white/70 p-1 shadow-sm ring-1 ring-violet-200/60 dark:bg-slate-900/50">
+      <div className="flex shrink-0 gap-1 rounded-lg bg-white/70 p-1 shadow-sm ring-1 ring-violet-200/60 dark:bg-slate-900/50">
         {TABS.map((tab) => (
           <button
             key={tab.key}
@@ -286,10 +287,15 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
         ))}
       </div>
 
-      <Card className={cn('border-0 shadow-md ring-1', tabMeta.ring)}>
+      <Card
+        className={cn(
+          'flex min-h-0 flex-1 flex-col overflow-hidden border-0 shadow-md ring-1',
+          tabMeta.ring,
+        )}
+      >
         <CardHeader
           className={cn(
-            'space-y-0.5 bg-gradient-to-r px-3 py-2.5 text-white',
+            'shrink-0 space-y-0.5 bg-gradient-to-r px-3 py-2.5 text-white',
             tabMeta.accent,
           )}
         >
@@ -298,23 +304,28 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
             {monthTitle} · {tabMeta.description}
           </CardDescription>
         </CardHeader>
-        <CardContent className={cn('space-y-2 p-3', tabMeta.bg)}>
-          <MonthNavBar
-            viewMonth={viewMonth}
-            onPrev={() => setViewMonth((m) => addMonths(m, -1))}
-            onNext={() => {
-              if (isViewingCurrentMonth) return
-              setViewMonth((m) => addMonths(m, 1))
-            }}
-            disabled={loading}
-            nextDisabled={isViewingCurrentMonth}
-          >
-            <span className="inline-flex items-center justify-center gap-1">
-              <CalendarDays className="h-3.5 w-3.5" />
-              {monthTitle}
-            </span>
-          </MonthNavBar>
+        <CardContent
+          className={cn('flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3', tabMeta.bg)}
+        >
+          <div className="shrink-0">
+            <MonthNavBar
+              viewMonth={viewMonth}
+              onPrev={() => setViewMonth((m) => addMonths(m, -1))}
+              onNext={() => {
+                if (isViewingCurrentMonth) return
+                setViewMonth((m) => addMonths(m, 1))
+              }}
+              disabled={loading}
+              nextDisabled={isViewingCurrentMonth}
+            >
+              <span className="inline-flex items-center justify-center gap-1">
+                <CalendarDays className="h-3.5 w-3.5" />
+                {monthTitle}
+              </span>
+            </MonthNavBar>
+          </div>
 
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {loading ? (
             <p className="py-8 text-center text-xs text-slate-500">Loading…</p>
           ) : error ? (
@@ -331,7 +342,7 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
             dailyGrid.tasks.length === 0 ? (
               <p className="py-6 text-center text-xs text-slate-500">No daily habits</p>
             ) : (
-              <div className="max-h-48 overflow-auto rounded-lg border border-rose-200/80 bg-white/80 dark:bg-slate-900/50">
+              <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-rose-200/80 bg-white/80 dark:bg-slate-900/50">
                 <table className="w-max min-w-full border-collapse text-[10px]">
                   <thead>
                     <tr className="border-b border-rose-200/60 bg-rose-50/90">
@@ -354,9 +365,16 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {dailyGrid.tasks.map((task) => (
+                    {dailyGrid.tasks.map((task, rowIdx) => {
+                      const rowTheme = getHabitRowTheme(rowIdx)
+                      return (
                       <tr key={task.id} className="border-b border-rose-100/80">
-                        <td className="sticky left-0 z-10 max-w-[8rem] truncate border-r bg-white/95 px-2 py-1 font-medium">
+                        <td
+                          className={cn(
+                            'sticky left-0 z-10 max-w-[8rem] truncate border-r px-2 py-1 font-medium',
+                            rowTheme.headerClass,
+                          )}
+                        >
                           {task.name}
                         </td>
                         {dailyGrid.days.map((day) => {
@@ -375,7 +393,8 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
                           )
                         })}
                       </tr>
-                    ))}
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -384,7 +403,7 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
             weeklyGrid.tasks.length === 0 || weeklyGrid.sundays.length === 0 ? (
               <p className="py-6 text-center text-xs text-slate-500">No weekly habits</p>
             ) : (
-              <div className="max-h-48 overflow-auto rounded-lg border border-emerald-200/80 bg-white/80 dark:bg-slate-900/50">
+              <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-emerald-200/80 bg-white/80 dark:bg-slate-900/50">
                 <table className="w-max min-w-full border-collapse text-[10px]">
                   <thead>
                     <tr className="border-b border-emerald-200/60 bg-emerald-50/90">
@@ -399,9 +418,16 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {weeklyGrid.tasks.map((task) => (
+                    {weeklyGrid.tasks.map((task, rowIdx) => {
+                      const rowTheme = getHabitRowTheme(rowIdx)
+                      return (
                       <tr key={task.id} className="border-b border-emerald-100/80">
-                        <td className="sticky left-0 z-10 max-w-[8rem] truncate border-r bg-white/95 px-2 py-1 font-medium">
+                        <td
+                          className={cn(
+                            'sticky left-0 z-10 max-w-[8rem] truncate border-r px-2 py-1 font-medium',
+                            rowTheme.headerClass,
+                          )}
+                        >
                           {task.name}
                         </td>
                         {weeklyGrid.sundays.map((s) => {
@@ -420,14 +446,16 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
                           )
                         })}
                       </tr>
-                    ))}
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
             )
           ) : activeTab === 'dated' ? (
-            <>
-              <DatedDatePicker
+            <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+              <div className="shrink-0">
+                <DatedDatePicker
                 id="shared-habit-dated-date"
                 value={selectedHabitDate}
                 min={viewMonthBounds.min}
@@ -443,19 +471,24 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
                   if (value < viewMonthBounds.min || value > viewMonthBounds.max) return
                   setSelectedHabitDate(value)
                 }}
-              />
+                />
+              </div>
               {!datedTasksForSelectedDate.length ? (
                 <p className="py-6 text-center text-xs text-slate-500">
                   No add-ons for this day
                 </p>
               ) : (
-                <ul className="space-y-1.5 rounded-lg border border-white/80 bg-white/70 p-2 dark:bg-slate-900/40">
-                  {datedTasksForSelectedDate.map((task) => {
+                <ul className="min-h-0 flex-1 space-y-1.5 overflow-auto rounded-lg border border-white/80 bg-white/70 p-2 dark:bg-slate-900/40">
+                  {datedTasksForSelectedDate.map((task, rowIdx) => {
                     const id = task.subTaskId?.toString?.() ?? String(task.subTaskId)
+                    const rowTheme = getHabitRowTheme(rowIdx)
                     return (
                       <li
                         key={id}
-                        className="flex items-center gap-2 rounded-md bg-white/60 px-2 py-1.5 text-sm dark:bg-slate-800/60"
+                        className={cn(
+                          'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm',
+                          rowTheme.cellClass,
+                        )}
                       >
                         <HabitCompletionToggle
                           readOnly
@@ -474,15 +507,19 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
                   })}
                 </ul>
               )}
-            </>
+            </div>
           ) : activeTab === 'monthly' && monthlySlot?.Task?.length ? (
-            <ul className="space-y-1.5 rounded-lg border border-white/80 bg-white/70 p-2 dark:bg-slate-900/40">
-              {monthlySlot.Task.map((task) => {
+            <ul className="min-h-0 flex-1 space-y-1.5 overflow-auto rounded-lg border border-white/80 bg-white/70 p-2 dark:bg-slate-900/40">
+              {monthlySlot.Task.map((task, rowIdx) => {
                 const id = task.subTaskId?.toString?.() ?? String(task.subTaskId)
+                const rowTheme = getHabitRowTheme(rowIdx)
                 return (
                   <li
                     key={id}
-                    className="flex items-center gap-2 rounded-md bg-white/60 px-2 py-1.5 text-sm dark:bg-slate-800/60"
+                    className={cn(
+                      'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm',
+                      rowTheme.cellClass,
+                    )}
                   >
                     <HabitCompletionToggle
                       readOnly
@@ -503,6 +540,7 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
           ) : (
             <p className="py-6 text-center text-xs text-slate-500">No monthly habits</p>
           )}
+          </div>
         </CardContent>
       </Card>
     </div>
