@@ -48,6 +48,50 @@ export const TASK_COLUMN_HEADER_CLASS =
 export const TASK_COLUMN_CELL_CLASS =
   'bg-slate-200/80 text-slate-800 dark:bg-slate-900/90 dark:text-slate-100'
 
+export const HABIT_LIST_ROW_COMPLETE =
+  'border-emerald-300/80 bg-emerald-50/90 dark:bg-emerald-950/40'
+
+export const HABIT_LIST_ROW_IDLE =
+  'border-transparent bg-white/60 hover:border-emerald-200/80 dark:bg-slate-800/60 dark:hover:border-emerald-800/50'
+
+export const WEEKLY_HIGHLIGHT_HEADER_CLASS =
+  'bg-emerald-200 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100'
+
+export const WEEKLY_HIGHLIGHT_CELL_CLASS =
+  'bg-emerald-100/80 dark:bg-emerald-950/25'
+
+export const WEEKLY_IDLE_HEADER_CLASS =
+  'bg-slate-100/60 text-slate-700 dark:bg-slate-800/50 dark:text-slate-300'
+
+export const WEEKLY_IDLE_CELL_CLASS =
+  'bg-slate-50/50 dark:bg-slate-900/20'
+
+export const MONTHLY_COLUMN_HEADER_ACTIVE =
+  'bg-violet-200 text-violet-900 dark:bg-violet-950/50 dark:text-violet-100'
+
+export const MONTHLY_COLUMN_CELL_ACTIVE =
+  'bg-violet-100/80 dark:bg-violet-950/25'
+
+export const MONTHLY_COLUMN_HEADER_IDLE = WEEKLY_IDLE_HEADER_CLASS
+
+export const MONTHLY_COLUMN_CELL_IDLE = WEEKLY_IDLE_CELL_CLASS
+
+/** add-ons tab — sky tint (distinct from monthly violet). */
+export const DATED_ADDON_COLUMN_HEADER_ACTIVE =
+  'bg-sky-200 text-sky-900 dark:bg-sky-950/50 dark:text-sky-100'
+
+export const DATED_ADDON_COLUMN_CELL_ACTIVE =
+  'bg-sky-100/80 dark:bg-sky-950/25'
+
+export const DATED_ADDON_COLUMN_HEADER_IDLE = WEEKLY_IDLE_HEADER_CLASS
+
+export const DATED_ADDON_COLUMN_CELL_IDLE = WEEKLY_IDLE_CELL_CLASS
+
+/** Rotating band color per Sunday column in the weekly grid. */
+export function getWeeklySundayColumnTheme(colIdx) {
+  return WEEKDAY_PALETTE[colIdx % WEEKDAY_PALETTE.length]
+}
+
 function getWeekBandIndex(day) {
   return Math.floor((day - 1) / 7)
 }
