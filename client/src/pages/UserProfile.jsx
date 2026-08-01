@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import SharedHabitView from '@/components/follow/SharedHabitView'
 import { clearSession, getStoredUser } from '@/lib/auth-api'
 import { followRequest } from '@/lib/follow-api'
+import { cn } from '@/lib/utils'
 
 function formatYearMonth(d) {
   const y = d.getFullYear()
@@ -113,7 +114,7 @@ export default function UserProfile() {
   const backHref = source === 'following' ? '/following' : '/followers'
 
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-br from-violet-200/70 via-fuchsia-100/80 to-cyan-200/70">
+    <div className="flex h-screen flex-col overflow-hidden bg-gradient-to-br from-violet-200/70 via-fuchsia-100/80 to-cyan-200/70">
       <AppPageHeader
         title="Profile"
         subtitle="Follower and following details"
@@ -122,15 +123,20 @@ export default function UserProfile() {
         backTo={backHref}
       />
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-5 sm:px-6 sm:py-6">
-        <section className="rounded-2xl border border-white/70 bg-white/45 p-4 shadow-sm ring-1 ring-violet-200/50 backdrop-blur-sm dark:border-slate-800/50 dark:bg-slate-900/30">
+      <main className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col overflow-hidden px-4 py-2 sm:px-6 sm:py-6">
+        <section
+          className={cn(
+            'flex min-h-0 flex-col overflow-hidden rounded-2xl border border-white/70 bg-white/45 shadow-sm ring-1 ring-violet-200/50 backdrop-blur-sm dark:border-slate-800/50 dark:bg-slate-900/30',
+            canViewTasks && !loading && !error ? 'flex-1 p-3 sm:p-4' : 'p-4',
+          )}
+        >
           {loading ? (
             <p className="py-8 text-center text-sm text-slate-500">Loading profile…</p>
           ) : error ? (
             <p className="py-8 text-center text-sm text-red-600">{error}</p>
           ) : (
             <>
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-violet-200/70 bg-white/80 px-4 py-3 dark:border-violet-900/50 dark:bg-slate-900/50">
+              <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-violet-200/70 bg-white/80 px-4 py-3 dark:border-violet-900/50 dark:bg-slate-900/50 sm:mb-4">
                 <div className="min-w-0">
                   <p className="truncate text-base font-semibold text-slate-900 dark:text-white">
                     {userLabel}

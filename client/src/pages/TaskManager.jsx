@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { clearSession, getStoredUser } from '@/lib/auth-api'
+import { getHabitRowTheme } from '@/lib/daily-grid-theme'
 import { tasksRequest } from '@/lib/tasks-api'
 import { cn } from '@/lib/utils'
 
@@ -38,9 +39,12 @@ const TASK_LIST_SCROLL_CLASS =
 
 /** Inset focus ring + hover border so inputs do not overlap neighbors. */
 const TASK_INPUT_CLASS =
-  'min-w-0 rounded-md border-white/80 bg-white/90 text-base transition-colors hover:border-violet-300/80 focus-visible:border-violet-400 focus-visible:ring-2 focus-visible:ring-violet-400/30 focus-visible:ring-inset focus-visible:ring-offset-0 dark:border-slate-700 dark:bg-slate-900/90 dark:hover:border-violet-600/60 md:text-sm'
+  'min-w-0 rounded-md border-slate-300/90 bg-white text-base shadow-sm transition-colors placeholder:text-slate-500 hover:border-violet-400/80 focus-visible:border-violet-500 focus-visible:ring-2 focus-visible:ring-violet-400/35 focus-visible:ring-inset focus-visible:ring-offset-0 dark:border-slate-600 dark:bg-slate-900 dark:placeholder:text-slate-400 dark:hover:border-violet-500/70 md:text-sm'
 
 const TASK_ADD_INPUT_CLASS = cn(TASK_INPUT_CLASS, 'h-9 flex-1 md:h-8')
+
+const TASK_ADD_ROW_CLASS =
+  'flex shrink-0 items-center gap-1.5 rounded-lg border border-violet-300/90 bg-white p-1.5 shadow-md ring-1 ring-violet-200/70 dark:border-violet-700/80 dark:bg-slate-900/95 dark:ring-violet-800/50'
 
 const TASK_EDIT_INPUT_CLASS = cn(TASK_INPUT_CLASS, 'h-9 flex-1 md:h-8')
 
@@ -733,24 +737,6 @@ export default function TaskManager() {
     }
   }
 
-  async function onSave(e) {
-    e.preventDefault()
-    if (!canEdit) {
-      showToast('Tasks can only be modified for the current month', 'error')
-      return
-    }
-    const wasNewPlan = !existingId
-    try {
-      await persistLists(currentLists())
-      showToast(
-        wasNewPlan ? 'Plan saved for this month' : 'Month plan updated',
-        'info',
-      )
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Could not save plan', 'error')
-    }
-  }
-
   async function cloneFromPreviousMonth(sections = CLONEABLE_SECTIONS) {
     if (!canEdit) {
       showToast('Tasks can only be modified for the current month', 'error')
@@ -936,13 +922,14 @@ export default function TaskManager() {
             />
           ) : null}
           {canEdit ? (
-          <div className="flex items-center gap-1.5">
+          <div className={TASK_ADD_ROW_CLASS}>
             <Input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               placeholder={s.key === 'dated' ? 'Add a daily extra…' : 'Add a task…'}
               disabled={loading || saving || cloning}
               className={TASK_ADD_INPUT_CLASS}
+              aria-label={s.key === 'dated' ? 'Add a daily extra' : 'Add a task'}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault()
@@ -953,9 +940,10 @@ export default function TaskManager() {
             <Button
               type="button"
               size="sm"
-              className="h-9 shrink-0 px-2 md:h-8"
+              className="h-9 shrink-0 bg-gradient-to-r from-violet-600 to-fuchsia-600 px-2.5 text-white shadow-sm hover:from-violet-500 hover:to-fuchsia-500 md:h-8"
               disabled={loading || saving || cloning || !draft.trim()}
               onClick={() => void onAdd(s.key)}
+              aria-label="Add task"
             >
               <Plus className="h-4 w-4" />
             </Button>
@@ -964,7 +952,7 @@ export default function TaskManager() {
 
           <ul
             className={cn(
-              'min-h-0 space-y-1 rounded-lg border bg-white/70 p-2 pb-2 dark:bg-slate-900/40',
+              'min-h-0 overflow-hidden rounded-lg border dark:bg-slate-900/40',
               TASK_LIST_SCROLL_CLASS,
               s.listBorder,
             )}
@@ -991,11 +979,15 @@ export default function TaskManager() {
               pageTasks.map((task, i) => {
                 const index = start + i
                 const isEditing = editing?.section === s.key && editing?.index === index
+                const rowTheme = getHabitRowTheme(index)
 
                 return (
                   <li
                     key={`${s.key}-${task.id ?? index}-${task.taskName}`}
-                    className="flex min-h-11 min-w-0 items-center gap-1.5 rounded-md border border-transparent bg-white/60 px-2.5 py-2 dark:bg-slate-800/60 md:min-h-[2.5rem] md:gap-1 md:px-2 md:py-1"
+                    className={cn(
+                      'flex min-h-11 min-w-0 items-center gap-1.5 px-2.5 py-2 md:min-h-[2.5rem] md:gap-1 md:px-2 md:py-1',
+                      rowTheme.headerClass,
+                    )}
                   >
                     {isEditing ? (
                       <Input
@@ -1016,14 +1008,12 @@ export default function TaskManager() {
                       <span
                         className={cn(
                           'min-w-0 flex-1 truncate text-lg font-medium leading-snug md:text-sm md:font-normal',
-                          task.isPrivate
-                            ? 'text-violet-700 dark:text-violet-300'
-                            : 'text-slate-800 dark:text-slate-100',
+                          task.isPrivate && 'opacity-90',
                         )}
                       >
                         {task.taskName}
                         {task.isPrivate ? (
-                          <span className="ml-1 text-[10px] font-normal text-violet-500">
+                          <span className="ml-1 text-[10px] font-normal opacity-80">
                             (private)
                           </span>
                         ) : null}
@@ -1109,10 +1099,7 @@ export default function TaskManager() {
       <main className="flex min-h-0 w-full flex-1 flex-col overflow-hidden px-6 py-2 sm:px-10 md:px-14 lg:px-20">
         {toast ? <Toast message={toast.message} variant={toast.variant} /> : null}
 
-        <form
-          onSubmit={onSave}
-          className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col overflow-hidden"
-        >
+        <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col overflow-hidden">
           <div className="mb-2 shrink-0 overflow-hidden rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-500 to-cyan-500 p-px shadow-md">
             <div className="flex flex-col rounded-[11px] bg-white/95 backdrop-blur dark:bg-slate-950/95">
               <div className="flex items-center justify-between gap-2 px-2.5 py-1.5">
@@ -1207,26 +1194,16 @@ export default function TaskManager() {
             </div>
           </div>
 
-          <div className="mt-2 flex shrink-0 items-center justify-between gap-3 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
-            <p className="min-w-0 flex-1 text-left text-[11px] leading-snug text-violet-900/70">
+          <div className="mt-2 shrink-0 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+            <p className="text-center text-[11px] leading-snug text-violet-900/70">
               {!canEdit
                 ? 'Past plans cannot be changed here.'
                 : existingId
-                  ? `You already have a plan for ${monthTitle}. Trash deletes a task immediately; pencil edits save on blur.`
-                  : `No plan for ${monthTitle} yet. Copy from last month, add tasks, or click Update this month to save.`}
+                  ? 'Changes save automatically. Trash deletes a task immediately; pencil edits save on blur.'
+                  : `No plan for ${monthTitle} yet. Copy from last month or add tasks — each change saves automatically.`}
             </p>
-            {canEdit ? (
-            <Button
-              type="submit"
-              size="sm"
-              disabled={loading || saving || cloning || totalTaskCount === 0}
-              className="h-9 shrink-0 px-5 text-sm bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-sm hover:from-violet-500 hover:to-fuchsia-500 md:h-8"
-            >
-              {saving ? 'Saving…' : 'Update this month'}
-            </Button>
-            ) : null}
           </div>
-        </form>
+        </div>
       </main>
     </div>
   )

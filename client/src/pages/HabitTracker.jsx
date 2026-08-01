@@ -37,17 +37,13 @@ import {
 } from '@/lib/dated-tasks'
 import {
   getDailyColumnTheme,
+  getHabitRowTheme,
   getWeekdayInitial,
   getWeeklySundayColumnTheme,
-  DATED_ADDON_COLUMN_CELL_ACTIVE,
-  DATED_ADDON_COLUMN_CELL_IDLE,
   DATED_ADDON_COLUMN_HEADER_ACTIVE,
   DATED_ADDON_COLUMN_HEADER_IDLE,
-  MONTHLY_COLUMN_CELL_ACTIVE,
-  MONTHLY_COLUMN_CELL_IDLE,
   MONTHLY_COLUMN_HEADER_ACTIVE,
   MONTHLY_COLUMN_HEADER_IDLE,
-  TASK_COLUMN_CELL_CLASS,
   TASK_COLUMN_HEADER_CLASS,
   WEEKLY_HIGHLIGHT_CELL_CLASS,
   WEEKLY_HIGHLIGHT_HEADER_CLASS,
@@ -920,12 +916,14 @@ export default function HabitTracker() {
                           </tr>
                         </thead>
                         <tbody>
-                          {weeklyGrid.tasks.map((task) => (
+                          {weeklyGrid.tasks.map((task, rowIdx) => {
+                            const rowTheme = getHabitRowTheme(rowIdx)
+                            return (
                             <tr key={task.id}>
                               <td
                                 className={cn(
                                   'sticky left-0 z-10 max-w-[9rem] truncate px-2 py-1.5 text-left font-medium',
-                                  TASK_COLUMN_CELL_CLASS,
+                                  rowTheme.headerClass,
                                 )}
                               >
                                 {task.name}
@@ -975,7 +973,8 @@ export default function HabitTracker() {
                                 )
                               })}
                             </tr>
-                          ))}
+                            )
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -1023,12 +1022,14 @@ export default function HabitTracker() {
                           </tr>
                         </thead>
                         <tbody>
-                          {dailyGrid.tasks.map((task) => (
+                          {dailyGrid.tasks.map((task, rowIdx) => {
+                            const rowTheme = getHabitRowTheme(rowIdx)
+                            return (
                             <tr key={task.id}>
                               <td
                                 className={cn(
                                   'sticky left-0 z-10 max-w-[9rem] truncate px-2 py-1.5 text-left font-medium',
-                                  TASK_COLUMN_CELL_CLASS,
+                                  rowTheme.headerClass,
                                 )}
                               >
                                 {task.name}
@@ -1081,7 +1082,8 @@ export default function HabitTracker() {
                                 )
                               })}
                             </tr>
-                          ))}
+                            )
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -1144,19 +1146,18 @@ export default function HabitTracker() {
                           </tr>
                         </thead>
                         <tbody>
-                          {paginatedListTasks.map((task) => {
+                          {paginatedListTasks.map((task, index) => {
                             const id = task.subTaskId?.toString?.() ?? String(task.subTaskId)
                             const canEdit = activeTasks.canEdit !== false
-                            const cellClass = canEdit
-                              ? DATED_ADDON_COLUMN_CELL_ACTIVE
-                              : DATED_ADDON_COLUMN_CELL_IDLE
+                            const rowIdx = (listPage.dated - 1) * tasksPerPage + index
+                            const rowTheme = getHabitRowTheme(rowIdx)
 
                             return (
                               <tr key={id}>
                                 <td
                                   className={cn(
                                     'max-w-[9rem] truncate px-2 py-1.5 text-left font-medium',
-                                    TASK_COLUMN_CELL_CLASS,
+                                    rowTheme.headerClass,
                                     task.isCompleted &&
                                       'text-emerald-900 line-through decoration-emerald-600/50 dark:text-emerald-100',
                                   )}
@@ -1166,7 +1167,7 @@ export default function HabitTracker() {
                                 <td
                                   className={cn(
                                     'p-0.5 text-center align-middle',
-                                    cellClass,
+                                    rowTheme.cellClass,
                                   )}
                                 >
                                   {canEdit ? (
@@ -1241,19 +1242,18 @@ export default function HabitTracker() {
                           </tr>
                         </thead>
                         <tbody>
-                          {paginatedListTasks.map((task) => {
+                          {paginatedListTasks.map((task, index) => {
                             const id = task.subTaskId?.toString?.() ?? String(task.subTaskId)
                             const canEdit = activeTasks.canEdit !== false
-                            const cellClass = canEdit
-                              ? MONTHLY_COLUMN_CELL_ACTIVE
-                              : MONTHLY_COLUMN_CELL_IDLE
+                            const rowIdx = (listPage.monthly - 1) * tasksPerPage + index
+                            const rowTheme = getHabitRowTheme(rowIdx)
 
                             return (
                               <tr key={id}>
                                 <td
                                   className={cn(
                                     'max-w-[9rem] truncate px-2 py-1.5 text-left font-medium',
-                                    TASK_COLUMN_CELL_CLASS,
+                                    rowTheme.headerClass,
                                     task.isCompleted &&
                                       'text-emerald-900 line-through decoration-emerald-600/50 dark:text-emerald-100',
                                   )}
@@ -1263,7 +1263,7 @@ export default function HabitTracker() {
                                 <td
                                   className={cn(
                                     'p-0.5 text-center align-middle',
-                                    cellClass,
+                                    rowTheme.cellClass,
                                   )}
                                 >
                                   {canEdit ? (

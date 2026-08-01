@@ -92,6 +92,11 @@ export function getWeeklySundayColumnTheme(colIdx) {
   return WEEKDAY_PALETTE[colIdx % WEEKDAY_PALETTE.length]
 }
 
+/** Distinct tint per task row (cycles through the daily palette). */
+export function getHabitRowTheme(rowIdx) {
+  return WEEKDAY_PALETTE[rowIdx % WEEKDAY_PALETTE.length]
+}
+
 function getWeekBandIndex(day) {
   return Math.floor((day - 1) / 7)
 }
