@@ -3,11 +3,10 @@ import { useToday } from '@/hooks/useToday'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   CalendarDays,
-  CheckCircle2,
-  Circle,
   ListChecks,
 } from 'lucide-react'
 import AppPageHeader from '@/components/layout/AppPageHeader'
+import { HabitCompletionToggle } from '@/components/habits/HabitCompletionToggle'
 import DatedDatePicker from '@/components/tasks/DatedDatePicker'
 import MonthNavBar, { addMonths } from '@/components/tasks/MonthNavBar'
 import TaskListPagination, {
@@ -928,43 +927,27 @@ export default function HabitTracker() {
                                     {!cell ? (
                                       <span className="inline-block h-5 w-5" aria-hidden />
                                     ) : canEdit ? (
-                                      <button
-                                        type="button"
+                                      <HabitCompletionToggle
+                                        size="sm"
+                                        checked={cell.isCompleted}
                                         disabled={patching}
                                         title={`${task.name} — ${sunday.label}`}
-                                        onClick={() =>
+                                        onChange={(next) =>
                                           void toggleTask(
                                             'weekly',
                                             task.id,
-                                            !cell.isCompleted,
+                                            next,
                                             cell.dateYmd,
                                           )
                                         }
-                                        className={cn(
-                                          'inline-flex h-6 w-6 items-center justify-center rounded-full transition',
-                                          cell.isCompleted
-                                            ? 'text-emerald-600 hover:bg-emerald-100'
-                                            : 'text-violet-400 hover:bg-violet-100',
-                                          patching && 'opacity-50',
-                                        )}
-                                      >
-                                        {cell.isCompleted ? (
-                                          <CheckCircle2 className="h-4 w-4" />
-                                        ) : (
-                                          <Circle className="h-4 w-4" />
-                                        )}
-                                      </button>
+                                      />
                                     ) : (
-                                      <span
-                                        className="inline-flex h-6 w-6 items-center justify-center"
+                                      <HabitCompletionToggle
+                                        size="sm"
+                                        readOnly
+                                        checked={cell.isCompleted}
                                         title="View only — check off on next Sunday"
-                                      >
-                                        {cell.isCompleted ? (
-                                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/80" />
-                                        ) : (
-                                          <Circle className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600" />
-                                        )}
-                                      </span>
+                                      />
                                     )}
                                   </td>
                                 )
@@ -1046,47 +1029,31 @@ export default function HabitTracker() {
                                     {!cell ? (
                                       <span className="inline-block h-5 w-5" aria-hidden />
                                     ) : canEdit ? (
-                                      <button
-                                        type="button"
+                                      <HabitCompletionToggle
+                                        size="sm"
+                                        checked={cell.isCompleted}
                                         disabled={patching}
                                         title={`${task.name} — today`}
-                                        onClick={() =>
+                                        onChange={(next) =>
                                           void toggleTask(
                                             'daily',
                                             task.id,
-                                            !cell.isCompleted,
+                                            next,
                                             todayYmd,
                                           )
                                         }
-                                        className={cn(
-                                          'inline-flex h-6 w-6 items-center justify-center rounded-full transition',
-                                          cell.isCompleted
-                                            ? 'text-emerald-600 hover:bg-emerald-100'
-                                            : 'text-violet-400 hover:bg-violet-100',
-                                          patching && 'opacity-50',
-                                        )}
-                                      >
-                                        {cell.isCompleted ? (
-                                          <CheckCircle2 className="h-4 w-4" />
-                                        ) : (
-                                          <Circle className="h-4 w-4" />
-                                        )}
-                                      </button>
+                                      />
                                     ) : (
-                                      <span
-                                        className="inline-flex h-6 w-6 items-center justify-center"
+                                      <HabitCompletionToggle
+                                        size="sm"
+                                        readOnly
+                                        checked={cell.isCompleted}
                                         title={
                                           isToday
                                             ? undefined
                                             : 'View only — edit today’s column'
                                         }
-                                      >
-                                        {cell.isCompleted ? (
-                                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/80" />
-                                        ) : (
-                                          <Circle className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600" />
-                                        )}
-                                      </span>
+                                      />
                                     )}
                                   </td>
                                 )
@@ -1138,30 +1105,25 @@ export default function HabitTracker() {
                         return (
                           <li key={id}>
                             {canEdit ? (
-                              <button
-                                type="button"
+                              <HabitCompletionToggle
+                                checked={task.isCompleted}
                                 disabled={patching}
-                                onClick={() =>
+                                onChange={(next) =>
                                   tryToggleDailyExtra(
                                     activeTasks.type,
                                     activeTasks.dateYmd,
                                     id,
-                                    !task.isCompleted,
+                                    next,
                                   )
                                 }
                                 className={cn(
-                                  'flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition',
+                                  'rounded-lg border px-3 py-2.5 transition',
                                   task.isCompleted
                                     ? 'border-emerald-300/80 bg-emerald-50/90 dark:bg-emerald-950/40'
                                     : 'border-transparent bg-white/60 hover:border-violet-200 dark:bg-slate-800/60',
                                   patching && 'opacity-60',
                                 )}
                               >
-                                {task.isCompleted ? (
-                                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
-                                ) : (
-                                  <Circle className="h-5 w-5 shrink-0 text-violet-400" />
-                                )}
                                 <span
                                   className={cn(
                                     'flex-1 text-sm',
@@ -1172,7 +1134,7 @@ export default function HabitTracker() {
                                 >
                                   {task.subTaskName}
                                 </span>
-                              </button>
+                              </HabitCompletionToggle>
                             ) : (
                               <button
                                 type="button"
@@ -1187,11 +1149,11 @@ export default function HabitTracker() {
                                 }
                                 className="flex w-full items-center gap-3 rounded-lg border border-transparent bg-white/60 px-3 py-2.5 text-left dark:bg-slate-800/60"
                               >
-                                {task.isCompleted ? (
-                                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500/80" />
-                                ) : (
-                                  <Circle className="h-5 w-5 shrink-0 text-slate-300 dark:text-slate-600" />
-                                )}
+                                <HabitCompletionToggle
+                                  readOnly
+                                  checked={task.isCompleted}
+                                  className="pointer-events-none shrink-0"
+                                />
                                 <span
                                   className={cn(
                                     'flex-1 text-sm',
@@ -1239,30 +1201,25 @@ export default function HabitTracker() {
                         return (
                           <li key={id}>
                             {canEdit ? (
-                              <button
-                                type="button"
+                              <HabitCompletionToggle
+                                checked={task.isCompleted}
                                 disabled={patching}
-                                onClick={() =>
+                                onChange={(next) =>
                                   void toggleTask(
                                     activeTasks.type,
                                     id,
-                                    !task.isCompleted,
+                                    next,
                                     activeTasks.dateYmd,
                                   )
                                 }
                                 className={cn(
-                                  'flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition',
+                                  'rounded-lg border px-3 py-2.5 transition',
                                   task.isCompleted
                                     ? 'border-emerald-300/80 bg-emerald-50/90 dark:bg-emerald-950/40'
                                     : 'border-transparent bg-white/60 hover:border-violet-200 dark:bg-slate-800/60',
                                   patching && 'opacity-60',
                                 )}
                               >
-                                {task.isCompleted ? (
-                                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
-                                ) : (
-                                  <Circle className="h-5 w-5 shrink-0 text-violet-400" />
-                                )}
                                 <span
                                   className={cn(
                                     'flex-1 text-sm',
@@ -1273,14 +1230,14 @@ export default function HabitTracker() {
                                 >
                                   {task.subTaskName}
                                 </span>
-                              </button>
+                              </HabitCompletionToggle>
                             ) : (
                               <div className="flex w-full items-center gap-3 rounded-lg border border-transparent bg-white/60 px-3 py-2.5 dark:bg-slate-800/60">
-                                {task.isCompleted ? (
-                                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500/80" />
-                                ) : (
-                                  <Circle className="h-5 w-5 shrink-0 text-slate-300 dark:text-slate-600" />
-                                )}
+                                <HabitCompletionToggle
+                                  readOnly
+                                  checked={task.isCompleted}
+                                  className="shrink-0"
+                                />
                                 <span
                                   className={cn(
                                     'flex-1 text-sm',
