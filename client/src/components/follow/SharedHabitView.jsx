@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useToday } from '@/hooks/useToday'
 import {
   CalendarDays,
-  CheckCircle2,
-  Circle,
 } from 'lucide-react'
+import { HabitCompletionToggle } from '@/components/habits/HabitCompletionToggle'
 import DatedDatePicker from '@/components/tasks/DatedDatePicker'
 import MonthNavBar, { addMonths } from '@/components/tasks/MonthNavBar'
 import {
@@ -106,7 +106,7 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
     defaultSelectedDateForMonth(formatYearMonth(new Date()), new Date()),
   )
 
-  const today = useMemo(() => new Date(), [])
+  const today = useToday()
   const monthKey = useMemo(() => formatYearMonth(viewMonth), [viewMonth])
   const monthTitle = useMemo(() => formatMonthTitle(viewMonth), [viewMonth])
   const isViewingCurrentMonth = monthKey === formatYearMonth(today)
@@ -364,11 +364,12 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
                           return (
                             <td key={day} className="p-0.5 text-center">
                               {cell ? (
-                                cell.isCompleted ? (
-                                  <CheckCircle2 className="mx-auto h-3.5 w-3.5 text-emerald-500" />
-                                ) : (
-                                  <Circle className="mx-auto h-3.5 w-3.5 text-slate-300" />
-                                )
+                                <HabitCompletionToggle
+                                  size="sm"
+                                  readOnly
+                                  checked={cell.isCompleted}
+                                  className="mx-auto"
+                                />
                               ) : null}
                             </td>
                           )
@@ -408,11 +409,12 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
                           return (
                             <td key={s.index} className="p-0.5 text-center">
                               {cell ? (
-                                cell.isCompleted ? (
-                                  <CheckCircle2 className="mx-auto h-3.5 w-3.5 text-emerald-500" />
-                                ) : (
-                                  <Circle className="mx-auto h-3.5 w-3.5 text-slate-300" />
-                                )
+                                <HabitCompletionToggle
+                                  size="sm"
+                                  readOnly
+                                  checked={cell.isCompleted}
+                                  className="mx-auto"
+                                />
                               ) : null}
                             </td>
                           )
@@ -455,11 +457,11 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
                         key={id}
                         className="flex items-center gap-2 rounded-md bg-white/60 px-2 py-1.5 text-sm dark:bg-slate-800/60"
                       >
-                        {task.isCompleted ? (
-                          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
-                        ) : (
-                          <Circle className="h-4 w-4 shrink-0 text-slate-300" />
-                        )}
+                        <HabitCompletionToggle
+                          readOnly
+                          checked={task.isCompleted}
+                          className="shrink-0"
+                        />
                         <span
                           className={cn(
                             task.isCompleted && 'line-through text-emerald-800/80',
@@ -482,11 +484,11 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
                     key={id}
                     className="flex items-center gap-2 rounded-md bg-white/60 px-2 py-1.5 text-sm dark:bg-slate-800/60"
                   >
-                    {task.isCompleted ? (
-                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
-                    ) : (
-                      <Circle className="h-4 w-4 shrink-0 text-slate-300" />
-                    )}
+                    <HabitCompletionToggle
+                      readOnly
+                      checked={task.isCompleted}
+                      className="shrink-0"
+                    />
                     <span
                       className={cn(
                         task.isCompleted && 'line-through text-emerald-800/80',

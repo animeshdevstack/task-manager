@@ -6,6 +6,7 @@ import {
   UpdateTaskService,
   DeleteTaskService,
 } from "../service/add-task.service";
+import { getUserTimezone } from "../helper/user-timezone.helper";
 
 const AddTask = async (req: Request, res: Response) => {
   try {
@@ -14,7 +15,7 @@ const AddTask = async (req: Request, res: Response) => {
       res.status(401).json({ success: false, message: "Unauthorized" });
       return;
     }
-    const data = await CreateTaskService(req.body, userId);
+    const data = await CreateTaskService(req.body, userId, getUserTimezone(req));
     res.status(201).json({
       success: true,
       message: "Task created successfully",
@@ -89,7 +90,7 @@ const UpdateTask = async (req: Request, res: Response) => {
       return;
     }
     const { id } = req.params;
-    const data = await UpdateTaskService(id as string, req.body, userId);
+    const data = await UpdateTaskService(id as string, req.body, userId, getUserTimezone(req));
     res.status(200).json({
       success: true,
       message: "Task updated successfully",
@@ -112,7 +113,7 @@ const DeleteTask = async (req: Request, res: Response) => {
       return;
     }
     const { id } = req.params;
-    const data = await DeleteTaskService(id as string, userId);
+    const data = await DeleteTaskService(id as string, userId, getUserTimezone(req));
     res.status(200).json({
       success: true,
       message: "Task deleted successfully",

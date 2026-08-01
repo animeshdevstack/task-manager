@@ -4,6 +4,7 @@ import {
   GetReviewTaskByIdService,
   PatchReviewTaskCompletionService,
 } from "../service/review-task.service";
+import { getUserTimezone } from "../helper/user-timezone.helper";
 
 const GetReviewTasks = async (req: Request, res: Response) => {
   try {
@@ -83,13 +84,18 @@ const PatchReviewTask = async (req: Request, res: Response) => {
       return;
     }
 
-    const data = await PatchReviewTaskCompletionService(id as string, userId, {
-      type,
-      date,
-      dateYmd,
-      subTaskId,
-      isCompleted,
-    });
+    const data = await PatchReviewTaskCompletionService(
+      id as string,
+      userId,
+      {
+        type,
+        date,
+        dateYmd,
+        subTaskId,
+        isCompleted,
+      },
+      getUserTimezone(req),
+    );
     res.status(200).json({
       success: true,
       message: "Review task updated successfully",

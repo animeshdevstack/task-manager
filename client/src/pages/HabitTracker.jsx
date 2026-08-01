@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useToday } from '@/hooks/useToday'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   CalendarDays,
-  CheckCircle2,
-  Circle,
   ListChecks,
 } from 'lucide-react'
 import AppPageHeader from '@/components/layout/AppPageHeader'
+import { HabitCompletionToggle } from '@/components/habits/HabitCompletionToggle'
 import DatedDatePicker from '@/components/tasks/DatedDatePicker'
 import MonthNavBar, { addMonths } from '@/components/tasks/MonthNavBar'
 import TaskListPagination, {
@@ -29,12 +29,29 @@ import {
   dayYmdInMonth,
   defaultSelectedDateForMonth,
   formatDateYmd,
-  matchesCalendarYmd,
+  matchesReviewSlotYmd,
   monthDateBounds,
   resolveYmdForInstant,
   shiftDateYmd,
   sundayYmdsInMonth,
 } from '@/lib/dated-tasks'
+import {
+  getDailyColumnTheme,
+  getWeekdayInitial,
+  getWeeklySundayColumnTheme,
+  DATED_ADDON_COLUMN_CELL_ACTIVE,
+  DATED_ADDON_COLUMN_CELL_IDLE,
+  DATED_ADDON_COLUMN_HEADER_ACTIVE,
+  DATED_ADDON_COLUMN_HEADER_IDLE,
+  MONTHLY_COLUMN_CELL_ACTIVE,
+  MONTHLY_COLUMN_CELL_IDLE,
+  MONTHLY_COLUMN_HEADER_ACTIVE,
+  MONTHLY_COLUMN_HEADER_IDLE,
+  TASK_COLUMN_CELL_CLASS,
+  TASK_COLUMN_HEADER_CLASS,
+  WEEKLY_HIGHLIGHT_CELL_CLASS,
+  WEEKLY_HIGHLIGHT_HEADER_CLASS,
+} from '@/lib/daily-grid-theme'
 import { reviewRequest } from '@/lib/review-api'
 import { tasksRequest } from '@/lib/tasks-api'
 import { cn } from '@/lib/utils'
@@ -177,7 +194,7 @@ export default function HabitTracker() {
   const todayColumnRef = useRef(null)
   const weeklyColumnRef = useRef(null)
 
-  const today = useMemo(() => new Date(), [])
+  const today = useToday()
   const monthKey = useMemo(() => formatYearMonth(viewMonth), [viewMonth])
   const monthTitle = useMemo(() => formatMonthTitle(viewMonth), [viewMonth])
   const currentMonthTitle = useMemo(() => formatMonthTitle(today), [today])
@@ -337,7 +354,7 @@ export default function HabitTracker() {
     for (let day = 1; day <= daysInMonth; day++) {
       const ymd = dayYmdInMonth(monthKey, day)
       const entry = review.DailyTasks.find((e) =>
-        matchesCalendarYmd(new Date(e.todayDate), ymd),
+        matchesReviewSlotYmd(new Date(e.todayDate), ymd),
       )
       if (entry) slotByDay.set(day, entry)
     }
@@ -372,7 +389,7 @@ export default function HabitTracker() {
       : null
     const todaySlot = isViewingCurrentMonth
       ? review.DailyTasks.find((e) =>
-          matchesCalendarYmd(new Date(e.todayDate), todayYmd),
+          matchesReviewSlotYmd(new Date(e.todayDate), todayYmd),
         ) ?? null
       : null
     const todayTasks = (todaySlot?.Task ?? []).filter((t) => {
@@ -504,7 +521,7 @@ export default function HabitTracker() {
     }
     if (activeTab === 'dated' && review) {
       const slot = review.DailyTasks?.find((entry) =>
-        matchesCalendarYmd(new Date(entry.todayDate), selectedHabitDate),
+        matchesReviewSlotYmd(new Date(entry.todayDate), selectedHabitDate),
       )
       const datedIdsForDay = new Set(
         [...datedSubTaskMap.entries()]
@@ -548,7 +565,7 @@ export default function HabitTracker() {
   const datedHabitTaskCount = useMemo(() => {
     if (!review) return 0
     const slot = review.DailyTasks?.find((entry) =>
-      matchesCalendarYmd(new Date(entry.todayDate), selectedHabitDate),
+      matchesReviewSlotYmd(new Date(entry.todayDate), selectedHabitDate),
     )
     const datedIdsForDay = new Set(
       [...datedSubTaskMap.entries()]
@@ -818,6 +835,25 @@ export default function HabitTracker() {
                   <p className="shrink-0 text-center text-xs text-slate-600 dark:text-slate-400">
                     {monthNavHint}
                   </p>
+                  {activeTab === 'daily' && !loading && hasPlan && review ? (
+                    <p className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center text-[10px] text-slate-500 dark:text-slate-400">
+                      <span className="inline-flex items-center gap-1">
+                        <span
+                          className="inline-block h-2.5 w-2.5 rounded-sm bg-red-200 dark:bg-red-900/60"
+                          aria-hidden
+                        />
+                        Weekend
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <span className="inline-flex gap-0.5" aria-hidden>
+                          <span className="inline-block h-2.5 w-2.5 rounded-sm bg-sky-200 dark:bg-sky-900/60" />
+                          <span className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-200 dark:bg-emerald-900/60" />
+                          <span className="inline-block h-2.5 w-2.5 rounded-sm bg-orange-200 dark:bg-orange-900/60" />
+                        </span>
+                        Weekdays (unique per week)
+                      </span>
+                    </p>
+                  ) : null}
 
               {!hasPlan ? (
                 <div className="flex flex-col items-center gap-3 py-12 text-center">
@@ -848,15 +884,21 @@ export default function HabitTracker() {
                       No Sundays in {monthTitle}
                     </p>
                   ) : (
-                    <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-emerald-200/80 bg-white/80 dark:bg-slate-900/50">
+                    <div className="min-h-0 flex-1 overflow-auto rounded-lg bg-white/80 dark:bg-slate-900/50">
                       <table className="w-max min-w-full border-collapse text-[11px]">
                         <thead>
-                          <tr className="border-b border-emerald-200/60 bg-emerald-50/90 dark:bg-emerald-950/40">
-                            <th className="sticky left-0 z-20 min-w-[7.5rem] border-r border-emerald-200/60 bg-emerald-50/95 px-2 py-1.5 text-left font-semibold text-slate-800 dark:bg-emerald-950/90 dark:text-slate-100">
+                          <tr>
+                            <th
+                              className={cn(
+                                'sticky left-0 z-20 min-w-[7.5rem] px-2 py-1.5 text-left font-semibold',
+                                TASK_COLUMN_HEADER_CLASS,
+                              )}
+                            >
                               Task
                             </th>
                             {weeklyGrid.sundays.map((sunday, colIdx) => {
                               const isNext = colIdx === weeklyGrid.highlightIndex
+                              const theme = getWeeklySundayColumnTheme(colIdx)
                               return (
                                 <th
                                   key={`${sunday.date}-${colIdx}`}
@@ -864,8 +906,8 @@ export default function HabitTracker() {
                                   className={cn(
                                     'min-w-[3.25rem] px-1 py-1.5 text-center font-semibold leading-tight',
                                     isNext
-                                      ? 'bg-emerald-200 text-emerald-900 ring-1 ring-inset ring-emerald-400 dark:bg-emerald-800 dark:text-emerald-50'
-                                      : 'text-slate-600 dark:text-slate-400',
+                                      ? WEEKLY_HIGHLIGHT_HEADER_CLASS
+                                      : theme.headerClass,
                                   )}
                                 >
                                   <span className="block text-[9px] font-medium uppercase opacity-80">
@@ -879,66 +921,55 @@ export default function HabitTracker() {
                         </thead>
                         <tbody>
                           {weeklyGrid.tasks.map((task) => (
-                            <tr
-                              key={task.id}
-                              className="border-b border-emerald-100/80 last:border-0 dark:border-emerald-900/50"
-                            >
-                              <td className="sticky left-0 z-10 max-w-[9rem] truncate border-r border-emerald-100/80 bg-white/95 px-2 py-1.5 text-left font-medium text-slate-800 dark:bg-slate-900/90 dark:text-slate-100">
+                            <tr key={task.id}>
+                              <td
+                                className={cn(
+                                  'sticky left-0 z-10 max-w-[9rem] truncate px-2 py-1.5 text-left font-medium',
+                                  TASK_COLUMN_CELL_CLASS,
+                                )}
+                              >
                                 {task.name}
                               </td>
                               {weeklyGrid.sundays.map((sunday, colIdx) => {
                                 const cell = weeklyGrid.getCell(task.id, colIdx)
                                 const canEdit = cell?.canEdit
+                                const isNext = colIdx === weeklyGrid.highlightIndex
+                                const theme = getWeeklySundayColumnTheme(colIdx)
 
                                 return (
                                   <td
                                     key={`${task.id}-${colIdx}`}
                                     className={cn(
                                       'p-0.5 text-center align-middle',
-                                      colIdx === weeklyGrid.highlightIndex &&
-                                        'bg-emerald-50/70 dark:bg-emerald-950/30',
+                                      isNext
+                                        ? WEEKLY_HIGHLIGHT_CELL_CLASS
+                                        : theme.cellClass,
                                     )}
                                   >
                                     {!cell ? (
                                       <span className="inline-block h-5 w-5" aria-hidden />
                                     ) : canEdit ? (
-                                      <button
-                                        type="button"
+                                      <HabitCompletionToggle
+                                        size="sm"
+                                        checked={cell.isCompleted}
                                         disabled={patching}
                                         title={`${task.name} — ${sunday.label}`}
-                                        onClick={() =>
+                                        onChange={(next) =>
                                           void toggleTask(
                                             'weekly',
                                             task.id,
-                                            !cell.isCompleted,
+                                            next,
                                             cell.dateYmd,
                                           )
                                         }
-                                        className={cn(
-                                          'inline-flex h-6 w-6 items-center justify-center rounded-full transition',
-                                          cell.isCompleted
-                                            ? 'text-emerald-600 hover:bg-emerald-100'
-                                            : 'text-violet-400 hover:bg-violet-100',
-                                          patching && 'opacity-50',
-                                        )}
-                                      >
-                                        {cell.isCompleted ? (
-                                          <CheckCircle2 className="h-4 w-4" />
-                                        ) : (
-                                          <Circle className="h-4 w-4" />
-                                        )}
-                                      </button>
+                                      />
                                     ) : (
-                                      <span
-                                        className="inline-flex h-6 w-6 items-center justify-center"
+                                      <HabitCompletionToggle
+                                        size="sm"
+                                        readOnly
+                                        checked={cell.isCompleted}
                                         title="View only — check off on next Sunday"
-                                      >
-                                        {cell.isCompleted ? (
-                                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/80" />
-                                        ) : (
-                                          <Circle className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600" />
-                                        )}
-                                      </span>
+                                      />
                                     )}
                                   </td>
                                 )
@@ -957,28 +988,35 @@ export default function HabitTracker() {
                       No daily habits yet
                     </p>
                   ) : (
-                    <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-rose-200/80 bg-white/80 dark:bg-slate-900/50">
+                    <div className="min-h-0 flex-1 overflow-auto rounded-lg bg-white/80 dark:bg-slate-900/50">
                       <table className="w-max min-w-full border-collapse text-[11px]">
                         <thead>
-                          <tr className="border-b border-rose-200/60 bg-rose-50/90 dark:bg-rose-950/40">
-                            <th className="sticky left-0 z-20 min-w-[7.5rem] border-r border-rose-200/60 bg-rose-50/95 px-2 py-1.5 text-left font-semibold text-slate-800 dark:bg-rose-950/90 dark:text-slate-100">
+                          <tr>
+                            <th
+                              className={cn(
+                                'sticky left-0 z-20 min-w-[7.5rem] px-2 py-1.5 text-left font-semibold',
+                                TASK_COLUMN_HEADER_CLASS,
+                              )}
+                            >
                               Task
                             </th>
                             {dailyGrid.days.map((day) => {
                               const isToday =
                                 dailyGrid.isViewingCurrentMonth && day === dailyGrid.todayDay
+                              const theme = getDailyColumnTheme(day, monthKey)
                               return (
                                 <th
                                   key={day}
                                   ref={isToday ? todayColumnRef : undefined}
                                   className={cn(
-                                    'min-w-[1.75rem] px-0.5 py-1.5 text-center font-semibold',
-                                    isToday
-                                      ? 'bg-rose-200 text-rose-900 ring-1 ring-inset ring-rose-400 dark:bg-rose-800 dark:text-rose-50'
-                                      : 'text-slate-600 dark:text-slate-400',
+                                    'min-w-[1.75rem] px-0.5 py-1 text-center font-semibold leading-tight',
+                                    theme.headerClass,
                                   )}
                                 >
-                                  {day}
+                                  <span className="block text-[11px]">{day}</span>
+                                  <span className="block text-[8px] font-medium uppercase opacity-70">
+                                    {getWeekdayInitial(day, monthKey)}
+                                  </span>
                                 </th>
                               )
                             })}
@@ -986,11 +1024,13 @@ export default function HabitTracker() {
                         </thead>
                         <tbody>
                           {dailyGrid.tasks.map((task) => (
-                            <tr
-                              key={task.id}
-                              className="border-b border-rose-100/80 last:border-0 dark:border-rose-900/50"
-                            >
-                              <td className="sticky left-0 z-10 max-w-[9rem] truncate border-r border-rose-100/80 bg-white/95 px-2 py-1.5 text-left font-medium text-slate-800 dark:bg-slate-900/90 dark:text-slate-100">
+                            <tr key={task.id}>
+                              <td
+                                className={cn(
+                                  'sticky left-0 z-10 max-w-[9rem] truncate px-2 py-1.5 text-left font-medium',
+                                  TASK_COLUMN_CELL_CLASS,
+                                )}
+                              >
                                 {task.name}
                               </td>
                               {dailyGrid.days.map((day) => {
@@ -998,59 +1038,44 @@ export default function HabitTracker() {
                                 const isToday =
                                   dailyGrid.isViewingCurrentMonth && day === dailyGrid.todayDay
                                 const canEdit = isToday && cell?.date
+                                const theme = getDailyColumnTheme(day, monthKey)
 
                                 return (
                                   <td
                                     key={day}
                                     className={cn(
                                       'p-0.5 text-center align-middle',
-                                      isToday && 'bg-rose-50/70 dark:bg-rose-950/30',
+                                      theme.cellClass,
                                     )}
                                   >
                                     {!cell ? (
                                       <span className="inline-block h-5 w-5" aria-hidden />
                                     ) : canEdit ? (
-                                      <button
-                                        type="button"
+                                      <HabitCompletionToggle
+                                        size="sm"
+                                        checked={cell.isCompleted}
                                         disabled={patching}
                                         title={`${task.name} — today`}
-                                        onClick={() =>
+                                        onChange={(next) =>
                                           void toggleTask(
                                             'daily',
                                             task.id,
-                                            !cell.isCompleted,
+                                            next,
                                             todayYmd,
                                           )
                                         }
-                                        className={cn(
-                                          'inline-flex h-6 w-6 items-center justify-center rounded-full transition',
-                                          cell.isCompleted
-                                            ? 'text-emerald-600 hover:bg-emerald-100'
-                                            : 'text-violet-400 hover:bg-violet-100',
-                                          patching && 'opacity-50',
-                                        )}
-                                      >
-                                        {cell.isCompleted ? (
-                                          <CheckCircle2 className="h-4 w-4" />
-                                        ) : (
-                                          <Circle className="h-4 w-4" />
-                                        )}
-                                      </button>
+                                      />
                                     ) : (
-                                      <span
-                                        className="inline-flex h-6 w-6 items-center justify-center"
+                                      <HabitCompletionToggle
+                                        size="sm"
+                                        readOnly
+                                        checked={cell.isCompleted}
                                         title={
                                           isToday
                                             ? undefined
                                             : 'View only — edit today’s column'
                                         }
-                                      >
-                                        {cell.isCompleted ? (
-                                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/80" />
-                                        ) : (
-                                          <Circle className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600" />
-                                        )}
-                                      </span>
+                                      />
                                     )}
                                   </td>
                                 )
@@ -1089,90 +1114,92 @@ export default function HabitTracker() {
                     }}
                   />
 
-                  <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto rounded-lg border border-white/80 bg-white/70 p-2 dark:bg-slate-900/40">
-                    {!activeTasks?.tasks?.length ? (
-                      <li className="py-8 text-center text-xs text-slate-500">
-                        No daily extras for this day
-                      </li>
-                    ) : (
-                      paginatedListTasks.map((task) => {
-                        const id = task.subTaskId?.toString?.() ?? String(task.subTaskId)
-                        const canEdit = activeTasks.canEdit !== false
+                  {!activeTasks?.tasks?.length ? (
+                    <p className="py-8 text-center text-xs text-slate-500">
+                      No daily extras for this day
+                    </p>
+                  ) : (
+                    <div className="min-h-0 flex-1 overflow-auto rounded-lg bg-white/80 dark:bg-slate-900/50">
+                      <table className="w-full border-collapse text-[11px]">
+                        <thead>
+                          <tr>
+                            <th
+                              className={cn(
+                                'min-w-[7.5rem] px-2 py-1.5 text-left font-semibold',
+                                TASK_COLUMN_HEADER_CLASS,
+                              )}
+                            >
+                              Task
+                            </th>
+                            <th
+                              className={cn(
+                                'px-2 py-1.5 text-center font-semibold',
+                                activeTasks.canEdit !== false
+                                  ? DATED_ADDON_COLUMN_HEADER_ACTIVE
+                                  : DATED_ADDON_COLUMN_HEADER_IDLE,
+                              )}
+                            >
+                              {activeTasks?.label ?? 'Date'}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginatedListTasks.map((task) => {
+                            const id = task.subTaskId?.toString?.() ?? String(task.subTaskId)
+                            const canEdit = activeTasks.canEdit !== false
+                            const cellClass = canEdit
+                              ? DATED_ADDON_COLUMN_CELL_ACTIVE
+                              : DATED_ADDON_COLUMN_CELL_IDLE
 
-                        return (
-                          <li key={id}>
-                            {canEdit ? (
-                              <button
-                                type="button"
-                                disabled={patching}
-                                onClick={() =>
-                                  tryToggleDailyExtra(
-                                    activeTasks.type,
-                                    activeTasks.dateYmd,
-                                    id,
-                                    !task.isCompleted,
-                                  )
-                                }
-                                className={cn(
-                                  'flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition',
-                                  task.isCompleted
-                                    ? 'border-emerald-300/80 bg-emerald-50/90 dark:bg-emerald-950/40'
-                                    : 'border-transparent bg-white/60 hover:border-violet-200 dark:bg-slate-800/60',
-                                  patching && 'opacity-60',
-                                )}
-                              >
-                                {task.isCompleted ? (
-                                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
-                                ) : (
-                                  <Circle className="h-5 w-5 shrink-0 text-violet-400" />
-                                )}
-                                <span
+                            return (
+                              <tr key={id}>
+                                <td
                                   className={cn(
-                                    'flex-1 text-sm',
-                                    task.isCompleted
-                                      ? 'text-emerald-900 line-through decoration-emerald-600/50 dark:text-emerald-100'
-                                      : 'text-slate-800 dark:text-slate-100',
+                                    'max-w-[9rem] truncate px-2 py-1.5 text-left font-medium',
+                                    TASK_COLUMN_CELL_CLASS,
+                                    task.isCompleted &&
+                                      'text-emerald-900 line-through decoration-emerald-600/50 dark:text-emerald-100',
                                   )}
                                 >
                                   {task.subTaskName}
-                                </span>
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled={patching}
-                                onClick={() =>
-                                  tryToggleDailyExtra(
-                                    activeTasks.type,
-                                    activeTasks.dateYmd,
-                                    id,
-                                    !task.isCompleted,
-                                  )
-                                }
-                                className="flex w-full items-center gap-3 rounded-lg border border-transparent bg-white/60 px-3 py-2.5 text-left dark:bg-slate-800/60"
-                              >
-                                {task.isCompleted ? (
-                                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500/80" />
-                                ) : (
-                                  <Circle className="h-5 w-5 shrink-0 text-slate-300 dark:text-slate-600" />
-                                )}
-                                <span
+                                </td>
+                                <td
                                   className={cn(
-                                    'flex-1 text-sm',
-                                    task.isCompleted
-                                      ? 'text-emerald-800/80 line-through dark:text-emerald-200/80'
-                                      : 'text-slate-600 dark:text-slate-400',
+                                    'p-0.5 text-center align-middle',
+                                    cellClass,
                                   )}
                                 >
-                                  {task.subTaskName}
-                                </span>
-                              </button>
-                            )}
-                          </li>
-                        )
-                      })
-                    )}
-                  </ul>
+                                  {canEdit ? (
+                                    <HabitCompletionToggle
+                                      size="sm"
+                                      checked={task.isCompleted}
+                                      disabled={patching}
+                                      title={task.subTaskName}
+                                      onChange={(next) =>
+                                        tryToggleDailyExtra(
+                                          activeTasks.type,
+                                          activeTasks.dateYmd,
+                                          id,
+                                          next,
+                                        )
+                                      }
+                                    />
+                                  ) : (
+                                    <HabitCompletionToggle
+                                      size="sm"
+                                      readOnly
+                                      checked={task.isCompleted}
+                                      title="View only — check off today only"
+                                    />
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                   <TaskListPagination
                     sectionKey="Add-ons"
                     tasks={activeTasks?.tasks ?? []}
@@ -1184,84 +1211,92 @@ export default function HabitTracker() {
                 </>
               ) : (
                 <>
-                  {monthlySlot ? (
-                    <p className="shrink-0 text-center text-sm font-medium text-slate-800 dark:text-slate-100">
-                      Due {activeTasks?.label}
+                  {!activeTasks?.tasks?.length ? (
+                    <p className="py-8 text-center text-xs text-slate-500">
+                      No habits in this section yet
                     </p>
-                  ) : null}
+                  ) : (
+                    <div className="min-h-0 flex-1 overflow-auto rounded-lg bg-white/80 dark:bg-slate-900/50">
+                      <table className="w-full border-collapse text-[11px]">
+                        <thead>
+                          <tr>
+                            <th
+                              className={cn(
+                                'min-w-[7.5rem] px-2 py-1.5 text-left font-semibold',
+                                TASK_COLUMN_HEADER_CLASS,
+                              )}
+                            >
+                              Task
+                            </th>
+                            <th
+                              className={cn(
+                                'px-2 py-1.5 text-center font-semibold',
+                                activeTasks.canEdit !== false
+                                  ? MONTHLY_COLUMN_HEADER_ACTIVE
+                                  : MONTHLY_COLUMN_HEADER_IDLE,
+                              )}
+                            >
+                              {monthlySlot ? `Due ${activeTasks?.label}` : 'Due'}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paginatedListTasks.map((task) => {
+                            const id = task.subTaskId?.toString?.() ?? String(task.subTaskId)
+                            const canEdit = activeTasks.canEdit !== false
+                            const cellClass = canEdit
+                              ? MONTHLY_COLUMN_CELL_ACTIVE
+                              : MONTHLY_COLUMN_CELL_IDLE
 
-                  <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto rounded-lg border border-white/80 bg-white/70 p-2 dark:bg-slate-900/40">
-                    {!activeTasks?.tasks?.length ? (
-                      <li className="py-8 text-center text-xs text-slate-500">
-                        No habits in this section yet
-                      </li>
-                    ) : (
-                      paginatedListTasks.map((task) => {
-                        const id = task.subTaskId?.toString?.() ?? String(task.subTaskId)
-                        const canEdit = activeTasks.canEdit !== false
-
-                        return (
-                          <li key={id}>
-                            {canEdit ? (
-                              <button
-                                type="button"
-                                disabled={patching}
-                                onClick={() =>
-                                  void toggleTask(
-                                    activeTasks.type,
-                                    id,
-                                    !task.isCompleted,
-                                    activeTasks.dateYmd,
-                                  )
-                                }
-                                className={cn(
-                                  'flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition',
-                                  task.isCompleted
-                                    ? 'border-emerald-300/80 bg-emerald-50/90 dark:bg-emerald-950/40'
-                                    : 'border-transparent bg-white/60 hover:border-violet-200 dark:bg-slate-800/60',
-                                  patching && 'opacity-60',
-                                )}
-                              >
-                                {task.isCompleted ? (
-                                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
-                                ) : (
-                                  <Circle className="h-5 w-5 shrink-0 text-violet-400" />
-                                )}
-                                <span
+                            return (
+                              <tr key={id}>
+                                <td
                                   className={cn(
-                                    'flex-1 text-sm',
-                                    task.isCompleted
-                                      ? 'text-emerald-900 line-through decoration-emerald-600/50 dark:text-emerald-100'
-                                      : 'text-slate-800 dark:text-slate-100',
+                                    'max-w-[9rem] truncate px-2 py-1.5 text-left font-medium',
+                                    TASK_COLUMN_CELL_CLASS,
+                                    task.isCompleted &&
+                                      'text-emerald-900 line-through decoration-emerald-600/50 dark:text-emerald-100',
                                   )}
                                 >
                                   {task.subTaskName}
-                                </span>
-                              </button>
-                            ) : (
-                              <div className="flex w-full items-center gap-3 rounded-lg border border-transparent bg-white/60 px-3 py-2.5 dark:bg-slate-800/60">
-                                {task.isCompleted ? (
-                                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500/80" />
-                                ) : (
-                                  <Circle className="h-5 w-5 shrink-0 text-slate-300 dark:text-slate-600" />
-                                )}
-                                <span
+                                </td>
+                                <td
                                   className={cn(
-                                    'flex-1 text-sm',
-                                    task.isCompleted
-                                      ? 'text-emerald-800/80 line-through dark:text-emerald-200/80'
-                                      : 'text-slate-600 dark:text-slate-400',
+                                    'p-0.5 text-center align-middle',
+                                    cellClass,
                                   )}
                                 >
-                                  {task.subTaskName}
-                                </span>
-                              </div>
-                            )}
-                          </li>
-                        )
-                      })
-                    )}
-                  </ul>
+                                  {canEdit ? (
+                                    <HabitCompletionToggle
+                                      size="sm"
+                                      checked={task.isCompleted}
+                                      disabled={patching}
+                                      title={task.subTaskName}
+                                      onChange={(next) =>
+                                        void toggleTask(
+                                          activeTasks.type,
+                                          id,
+                                          next,
+                                          activeTasks.dateYmd,
+                                        )
+                                      }
+                                    />
+                                  ) : (
+                                    <HabitCompletionToggle
+                                      size="sm"
+                                      readOnly
+                                      checked={task.isCompleted}
+                                      title="View only — check off at month end"
+                                    />
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                   <TaskListPagination
                     sectionKey="Monthly habits"
                     tasks={activeTasks?.tasks ?? []}

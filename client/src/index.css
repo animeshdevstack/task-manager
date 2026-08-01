@@ -57,3 +57,126 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+
+@layer components {
+  .habit-neon-checkbox {
+    --checkbox-size: 1.125rem;
+    --checkbox-color: rgb(16 185 129);
+    --checkbox-accent: rgb(52 211 153);
+    --checkbox-shadow: rgb(16 185 129 / 0.28);
+    --checkbox-border: rgb(52 211 153 / 0.4);
+    --checkbox-bg: rgb(255 255 255 / 0.85);
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    user-select: none;
+  }
+
+  .dark .habit-neon-checkbox {
+    --checkbox-border: rgb(52 211 153 / 0.32);
+    --checkbox-bg: rgb(30 41 59 / 0.5);
+    --checkbox-shadow: rgb(16 185 129 / 0.22);
+  }
+
+  .habit-neon-checkbox-row {
+    @apply w-full gap-3 text-left;
+  }
+
+  .habit-neon-checkbox-inline {
+    @apply justify-center;
+  }
+
+  .habit-neon-checkbox input {
+    @apply absolute h-0 w-0 cursor-pointer opacity-0;
+  }
+
+  .habit-neon-checkmark {
+    position: relative;
+    flex-shrink: 0;
+    width: var(--checkbox-size);
+    height: var(--checkbox-size);
+    border: 1px solid var(--checkbox-border);
+    border-radius: calc(var(--checkbox-size) * 0.32);
+    transition: all 0.35s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: var(--checkbox-bg);
+    box-shadow: 0 0 6px rgb(16 185 129 / 0.1);
+    overflow: hidden;
+  }
+
+  .habit-neon-checkmark::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(45deg, var(--checkbox-color), var(--checkbox-accent));
+    opacity: 0;
+    transition: all 0.35s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    transform: scale(0) rotate(-45deg);
+  }
+
+  .habit-neon-checkbox input:checked ~ .habit-neon-checkmark::before {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+
+  .habit-neon-checkmark svg {
+    width: 0;
+    height: 0;
+    color: rgb(6 78 59);
+    z-index: 1;
+    transition: all 0.35s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  }
+
+  .dark .habit-neon-checkmark svg {
+    color: rgb(236 253 245);
+  }
+
+  .habit-neon-checkbox input:checked ~ .habit-neon-checkmark svg {
+    width: calc(var(--checkbox-size) * 0.68);
+    height: calc(var(--checkbox-size) * 0.68);
+    transform: rotate(360deg);
+  }
+
+  .habit-neon-checkbox:not(.habit-neon-checkbox-readonly):hover .habit-neon-checkmark {
+    border-color: var(--checkbox-color);
+    transform: scale(1.08);
+    box-shadow:
+      0 0 12px var(--checkbox-shadow),
+      inset 0 0 6px rgb(16 185 129 / 0.1);
+  }
+
+  .habit-neon-checkbox:not(.habit-neon-checkbox-readonly)
+    input:checked
+    ~ .habit-neon-checkmark {
+    border-color: var(--checkbox-color);
+    box-shadow: 0 0 14px var(--checkbox-shadow);
+    animation: habit-neon-pulse 0.7s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  }
+
+  @keyframes habit-neon-pulse {
+    0% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(0.92);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  .habit-neon-checkbox-sm {
+    --checkbox-size: 0.95rem;
+  }
+
+  .habit-neon-checkbox-readonly .habit-neon-checkmark {
+    box-shadow: none;
+  }
+
+  .habit-neon-checkbox-readonly input:checked ~ .habit-neon-checkmark {
+    animation: none;
+    box-shadow: none;
+  }
+}

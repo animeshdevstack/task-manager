@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useToday } from '@/hooks/useToday'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
@@ -72,7 +73,7 @@ function getFollowStateForUser(userId, followData) {
 export default function Home() {
   const navigate = useNavigate()
   const [user] = useState(getStoredUser)
-  const today = useMemo(() => new Date(), [])
+  const today = useToday()
   const monthKey = useMemo(() => formatYearMonth(today), [today])
   const monthTitle = useMemo(() => formatMonthTitle(today), [today])
   const displayName = user?.email?.split('@')[0] ?? 'there'

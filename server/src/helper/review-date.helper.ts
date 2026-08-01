@@ -2,9 +2,11 @@ import {
   formatDateYmd,
   formatDateYmdUtc,
   instantMatchesCalendarYmd,
+  isUtcNoonCalendarSlot,
+  matchesReviewSlotYmd,
 } from "./dated-tasks.helper";
 
-export { formatDateYmdUtc };
+export { formatDateYmdUtc, isUtcNoonCalendarSlot, matchesReviewSlotYmd };
 
 /** Parse "YYYY-MM" into year and 0-based month index. */
 export const parseMonthYear = (
@@ -33,6 +35,13 @@ export const formatDateYmdFromParts = (
   return `${year}-${m}-${d}`;
 };
 
+/** UTC noon for calendar day — stable across server timezones (UTC−12 … UTC+12). */
+export const calendarDateToUtcNoon = (
+  year: number,
+  monthIndex: number,
+  day: number,
+): Date => new Date(Date.UTC(year, monthIndex, day, 12, 0, 0));
+
 /** Index review slots by local and UTC YMD so legacy stored dates still match. */
 export const indexReviewSlotByYmd = <T>(
   entries: T[],
@@ -51,61 +60,79 @@ export const indexReviewSlotByYmd = <T>(
   return map;
 };
 
+const matchesLegacyReviewSlotYmd = (
+  d: Date,
+  ymd: string,
+  year: number,
+  monthIndex: number,
+  dayNum: number,
+): boolean => {
+  if (isUtcNoonCalendarSlot(d)) return false;
+
+  if (instantMatchesCalendarYmd(d, ymd)) return true;
+
+  const localMatch =
+    d.getFullYear() === year &&
+    d.getMonth() === monthIndex &&
+    d.getDate() === dayNum;
+  const utcMatch =
+    d.getUTCFullYear() === year &&
+    d.getUTCMonth() === monthIndex &&
+    d.getUTCDate() === dayNum;
+
+  if (localMatch || utcMatch) return true;
+
+  const localDayDiff = Math.abs(d.getDate() - dayNum);
+  const utcDayDiff = Math.abs(d.getUTCDate() - dayNum);
+  const inSameLocalMonth =
+    d.getFullYear() === year && d.getMonth() === monthIndex;
+  const inSameUtcMonth =
+    d.getUTCFullYear() === year && d.getUTCMonth() === monthIndex;
+
+  return (
+    (inSameLocalMonth && localDayDiff === 1) ||
+    (inSameUtcMonth && utcDayDiff === 1)
+  );
+};
+
 /**
  * Resolve an existing review slot for a canonical calendar day (YYYY-MM-DD).
  * Falls back to day-of-month matching within monthYear for legacy UTC-shifted dates.
  */
 export const findReviewSlotByYmd = <T>(
   entries: T[],
-  byYmd: Map<string, T>,
+  _byYmd: Map<string, T>,
   ymd: string,
   monthYear: string,
   getDateField: (entry: T) => Date,
 ): T | undefined => {
-  const direct = byYmd.get(ymd);
-  if (direct) return direct;
-
   const { year, monthIndex } = parseMonthYear(monthYear);
   const dayNum = Number(ymd.split("-")[2]);
   if (!dayNum) return undefined;
 
-  return entries.find((entry) => {
-    const d = getDateField(entry);
-    if (instantMatchesCalendarYmd(d, ymd)) return true;
+  const strict = entries.find((entry) =>
+    matchesReviewSlotYmd(getDateField(entry), ymd),
+  );
+  if (strict) return strict;
 
-    const localMatch =
-      d.getFullYear() === year &&
-      d.getMonth() === monthIndex &&
-      d.getDate() === dayNum;
-    const utcMatch =
-      d.getUTCFullYear() === year &&
-      d.getUTCMonth() === monthIndex &&
-      d.getUTCDate() === dayNum;
-
-    if (localMatch || utcMatch) return true;
-
-    // Legacy: local-midnight dates stored with UTC offset (±1 calendar day)
-    const localDayDiff = Math.abs(d.getDate() - dayNum);
-    const utcDayDiff = Math.abs(d.getUTCDate() - dayNum);
-    const inSameLocalMonth =
-      d.getFullYear() === year && d.getMonth() === monthIndex;
-    const inSameUtcMonth =
-      d.getUTCFullYear() === year && d.getUTCMonth() === monthIndex;
-
-    return (
-      (inSameLocalMonth && localDayDiff === 1) ||
-      (inSameUtcMonth && utcDayDiff === 1)
-    );
-  });
+  return entries.find((entry) =>
+    matchesLegacyReviewSlotYmd(
+      getDateField(entry),
+      ymd,
+      year,
+      monthIndex,
+      dayNum,
+    ),
+  );
 };
 
 export const getAllDaysInMonth = (monthYear: string): ReviewDateSlot[] => {
   const { year, monthIndex } = parseMonthYear(monthYear);
-  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  const daysInMonth = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
   const days: ReviewDateSlot[] = [];
   for (let d = 1; d <= daysInMonth; d++) {
     days.push({
-      date: new Date(year, monthIndex, d),
+      date: calendarDateToUtcNoon(year, monthIndex, d),
       ymd: formatDateYmdFromParts(year, monthIndex, d),
     });
   }
@@ -114,12 +141,13 @@ export const getAllDaysInMonth = (monthYear: string): ReviewDateSlot[] => {
 
 export const getAllSundaysInMonth = (monthYear: string): ReviewDateSlot[] => {
   const { year, monthIndex } = parseMonthYear(monthYear);
-  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  const daysInMonth = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
   const sundays: ReviewDateSlot[] = [];
   for (let d = 1; d <= daysInMonth; d++) {
-    if (new Date(year, monthIndex, d).getDay() === 0) {
+    const utcDow = new Date(Date.UTC(year, monthIndex, d)).getUTCDay();
+    if (utcDow === 0) {
       sundays.push({
-        date: new Date(year, monthIndex, d),
+        date: calendarDateToUtcNoon(year, monthIndex, d),
         ymd: formatDateYmdFromParts(year, monthIndex, d),
       });
     }
@@ -129,7 +157,8 @@ export const getAllSundaysInMonth = (monthYear: string): ReviewDateSlot[] => {
 
 export const getLastDayOfMonth = (monthYear: string): Date => {
   const { year, monthIndex } = parseMonthYear(monthYear);
-  return new Date(year, monthIndex + 1, 0);
+  const lastDay = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+  return calendarDateToUtcNoon(year, monthIndex, lastDay);
 };
 
 export const isSameCalendarDay = (a: Date, b: Date): boolean =>

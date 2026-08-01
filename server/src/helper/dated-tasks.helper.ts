@@ -19,6 +19,24 @@ export const formatDateYmdUtc = (d: Date): string => {
 export const matchesCalendarYmd = (d: Date, ymd: string): boolean =>
   formatDateYmd(d) === ymd || formatDateYmdUtc(d) === ymd;
 
+/** Canonical UTC-noon review slots (…T12:00:00.000Z) — one calendar day only. */
+export const isUtcNoonCalendarSlot = (d: Date): boolean =>
+  d.getUTCHours() === 12 &&
+  d.getUTCMinutes() === 0 &&
+  d.getUTCSeconds() === 0 &&
+  d.getUTCMilliseconds() === 0;
+
+/**
+ * Match a review slot to a calendar day for display/sync/PATCH.
+ * UTC-noon slots use exact UTC YMD; legacy instants use wide matching.
+ */
+export const matchesReviewSlotYmd = (d: Date, ymd: string): boolean => {
+  if (isUtcNoonCalendarSlot(d)) {
+    return formatDateYmdUtc(d) === ymd;
+  }
+  return matchesCalendarYmd(d, ymd);
+};
+
 /**
  * Inclusive UTC-ms range covering any instant that can represent `ymd` on Earth
  * (offsets UTC−12 … UTC+14). Handles legacy slots stored as local-midnight ISO.
@@ -100,20 +118,23 @@ export const isAllowedDatedTaskDate = (
   dateStr: string,
   monthYear: string,
   referenceDate: Date = new Date(),
+  referenceYmd?: string,
 ): boolean => {
   if (!DATE_YMD_RE.test(dateStr) || !isDateInMonth(dateStr, monthYear)) {
     return false;
   }
-  return dateStr >= formatDateYmd(referenceDate);
+  const todayYmd = referenceYmd ?? formatDateYmd(referenceDate);
+  return dateStr >= todayYmd;
 };
 
 export const getEditableDateBounds = (
   monthYear: string,
   referenceDate: Date = new Date(),
+  referenceYmd?: string,
 ): { min: string; max: string } => {
   const monthStart = `${monthYear}-01`;
   const max = getLastDateOfMonth(monthYear);
-  const todayYmd = formatDateYmd(referenceDate);
+  const todayYmd = referenceYmd ?? formatDateYmd(referenceDate);
   const min =
     todayYmd >= monthStart && todayYmd <= max ? todayYmd : monthStart;
   return { min, max };
@@ -145,6 +166,7 @@ export const normalizeDatedTasks = (
   monthYear: string,
   referenceDate: Date = new Date(),
   existingDatedTasks?: { date?: string }[],
+  referenceYmd?: string,
 ): { date: string; tasks: unknown[] }[] => {
   if (!Array.isArray(datedTasks)) {
     return [];
@@ -167,7 +189,7 @@ export const normalizeDatedTasks = (
     if (!isDateInMonth(rawDate, monthYear)) {
       throw new Error(`Date ${rawDate} must fall within month ${monthYear}`);
     }
-    if (!isAllowedDatedTaskDate(rawDate, monthYear, referenceDate) && !existingDates.has(rawDate)) {
+    if (!isAllowedDatedTaskDate(rawDate, monthYear, referenceDate, referenceYmd) && !existingDates.has(rawDate)) {
       throw new Error(
         `Date ${rawDate} must be today or later within ${monthYear}`,
       );

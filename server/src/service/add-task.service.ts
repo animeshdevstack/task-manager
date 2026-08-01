@@ -2,6 +2,11 @@ import mongoose from "mongoose";
 import { AddTask } from "../model/add-task.model";
 import { normalizeDatedTasks } from "../helper/dated-tasks.helper";
 import {
+  getCurrentMonthYmInTimezone,
+  referenceDateFromYmd,
+  getTodayYmdInTimezone,
+} from "../helper/user-timezone.helper";
+import {
   upsertReviewTaskFromAddTask,
   deleteReviewTaskByTaskId,
   AddTaskForReview,
@@ -37,17 +42,30 @@ const toAddTaskForReview = (doc: {
   })),
 });
 
-const formatCurrentMonthAndYear = (d: Date): string => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
-};
 
-const assertCurrentMonthPlan = (monthYear: string): void => {
-  const current = formatCurrentMonthAndYear(new Date());
+const assertCurrentMonthPlan = (
+  monthYear: string,
+  userTimezone: string,
+): void => {
+  const current = getCurrentMonthYmInTimezone(userTimezone);
   if (monthYear !== current) {
     throw new Error("Tasks can only be created or modified for the current month");
   }
+};
+
+const resolveCreateMonthYear = (
+  requestedMonth: unknown,
+  userTimezone: string,
+): string => {
+  const current = getCurrentMonthYmInTimezone(userTimezone);
+  if (typeof requestedMonth === "string" && MONTH_YM_RE.test(requestedMonth.trim())) {
+    const trimmed = requestedMonth.trim();
+    if (trimmed !== current) {
+      throw new Error("Tasks can only be created or modified for the current month");
+    }
+    return trimmed;
+  }
+  return current;
 };
 
 const isTransactionUnsupported = (error: unknown): boolean => {
@@ -91,13 +109,17 @@ const applyTaskPlanUpdate = async (
     DatedTasks?: unknown;
   },
   existingDatedTasks?: DatedTaskDoc[],
+  userTimezone = "UTC",
 ): Promise<unknown> => {
   const { DailyTasks, WeeklyTasks, MonthlyTasks } = data;
+  const todayYmd = getTodayYmdInTimezone(userTimezone);
+  const referenceDate = referenceDateFromYmd(todayYmd);
   const DatedTasks = normalizeDatedTasks(
     data.DatedTasks,
     monthYear,
-    new Date(),
+    referenceDate,
     existingDatedTasks,
+    todayYmd,
   );
 
   return runWithTransaction(async (session) => {
@@ -115,12 +137,24 @@ const applyTaskPlanUpdate = async (
   });
 };
 
-const CreateTaskService = async (data: any, userId: string): Promise<any> => {
+const CreateTaskService = async (
+  data: any,
+  userId: string,
+  userTimezone = "UTC",
+): Promise<any> => {
   try {
     const { DailyTasks, WeeklyTasks, MonthlyTasks } = data;
-    const monthYear = formatCurrentMonthAndYear(new Date());
-    assertCurrentMonthPlan(monthYear);
-    const DatedTasks = normalizeDatedTasks(data.DatedTasks, monthYear);
+    const monthYear = resolveCreateMonthYear(data.currentMonthAndYear, userTimezone);
+    assertCurrentMonthPlan(monthYear, userTimezone);
+    const todayYmd = getTodayYmdInTimezone(userTimezone);
+    const referenceDate = referenceDateFromYmd(todayYmd);
+    const DatedTasks = normalizeDatedTasks(
+      data.DatedTasks,
+      monthYear,
+      referenceDate,
+      undefined,
+      todayYmd,
+    );
 
     const existing = await AddTask.findOne({
       userId,
@@ -134,6 +168,7 @@ const CreateTaskService = async (data: any, userId: string): Promise<any> => {
         monthYear,
         { DailyTasks, WeeklyTasks, MonthlyTasks, DatedTasks },
         existing.DatedTasks,
+        userTimezone,
       );
     }
 
@@ -245,13 +280,18 @@ const GetTaskByIdService = async (id: string, userId: string): Promise<any> => {
   }
 };
 
-const UpdateTaskService = async (id: string, data: any, userId: string): Promise<any> => {
+const UpdateTaskService = async (
+  id: string,
+  data: any,
+  userId: string,
+  userTimezone = "UTC",
+): Promise<any> => {
   try {
     const existing = await AddTask.findOne({ _id: id, userId });
     if (!existing) {
       throw new Error("Task not found");
     }
-    assertCurrentMonthPlan(existing.currentMonthAndYear);
+    assertCurrentMonthPlan(existing.currentMonthAndYear, userTimezone);
 
     return applyTaskPlanUpdate(
       id,
@@ -259,6 +299,7 @@ const UpdateTaskService = async (id: string, data: any, userId: string): Promise
       existing.currentMonthAndYear,
       data,
       existing.DatedTasks,
+      userTimezone,
     );
   } catch (error) {
     if (error instanceof Error) {
@@ -268,7 +309,11 @@ const UpdateTaskService = async (id: string, data: any, userId: string): Promise
   }
 };
 
-const DeleteTaskService = async (id: string, userId: string): Promise<any> => {
+const DeleteTaskService = async (
+  id: string,
+  userId: string,
+  userTimezone = "UTC",
+): Promise<any> => {
   try {
     return await runWithTransaction(async (session) => {
       const findQuery = AddTask.findOne({ _id: id, userId });
@@ -277,7 +322,7 @@ const DeleteTaskService = async (id: string, userId: string): Promise<any> => {
       if (!existing) {
         throw new Error("Task not found");
       }
-      assertCurrentMonthPlan(existing.currentMonthAndYear);
+      assertCurrentMonthPlan(existing.currentMonthAndYear, userTimezone);
 
       const deleteQuery = AddTask.findOneAndDelete({ _id: id, userId });
       if (session) deleteQuery.session(session);

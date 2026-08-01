@@ -154,6 +154,57 @@ describe("buildSyncedReviewUpdate", () => {
       true,
     );
   });
+
+  it("does not spread day-1 UTC-noon completion to day 2 on plan sync", () => {
+    const dailyTaskId = new Types.ObjectId();
+    const addTask: AddTaskForReview = {
+      _id: taskId,
+      userId,
+      currentMonthAndYear: "2026-08",
+      DailyTasks: [{ _id: dailyTaskId, taskName: "SHC" }],
+      WeeklyTasks: [],
+      MonthlyTasks: [],
+      DatedTasks: [],
+    };
+
+    const day1Noon = new Date("2026-08-01T12:00:00.000Z");
+    const day2Noon = new Date("2026-08-02T12:00:00.000Z");
+    const completedDay1 = toReviewSubTasks([
+      {
+        subTaskId: dailyTaskId,
+        subTaskName: "SHC",
+        isCompleted: true,
+      },
+    ]);
+    const incompleteDay2 = toReviewSubTasks([
+      {
+        subTaskId: dailyTaskId,
+        subTaskName: "SHC",
+        isCompleted: false,
+      },
+    ]);
+
+    const update = buildSyncedReviewUpdate(addTask, {
+      DailyTasks: [
+        { todayDate: day1Noon, Task: completedDay1 },
+        { todayDate: day2Noon, Task: incompleteDay2 },
+      ],
+      WeeklyTasks: [],
+      MonthlyTasks: {
+        monthEndDate: new Date("2026-08-31T12:00:00.000Z"),
+        Task: [],
+      },
+    });
+
+    const syncedDay2 = update.DailyTasks.find(
+      (slot) => slot.todayDate.toISOString() === "2026-08-02T12:00:00.000Z",
+    );
+    assert.ok(syncedDay2);
+    assert.equal(
+      syncedDay2.Task.find((t) => t.subTaskId.equals(dailyTaskId))?.isCompleted,
+      false,
+    );
+  });
 });
 
 describe("indexReviewSlotByYmd", () => {

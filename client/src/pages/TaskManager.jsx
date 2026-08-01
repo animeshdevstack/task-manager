@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useToday } from '@/hooks/useToday'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   CalendarDays,
@@ -305,7 +306,7 @@ export default function TaskManager() {
     return () => window.clearTimeout(timer)
   }, [toast])
 
-  const today = useMemo(() => new Date(), [])
+  const today = useToday()
   const currentMonthKey = useMemo(() => formatYearMonth(today), [today])
   const currentMonthTitle = useMemo(() => formatMonthTitle(today), [today])
   const monthKey = useMemo(() => formatYearMonth(viewMonth), [viewMonth])
@@ -553,7 +554,10 @@ export default function TaskManager() {
       } else {
         await tasksRequest('/add-tasks', {
           method: 'POST',
-          body: JSON.stringify(body),
+          body: JSON.stringify({
+            ...body,
+            currentMonthAndYear: currentMonthKey,
+          }),
         })
       }
       await refetchMonthPlan(options)
