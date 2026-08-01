@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useToday } from '@/hooks/useToday'
 import {
   CalendarDays,
   CheckCircle2,
@@ -106,7 +107,7 @@ export default function SharedHabitView({ targetUserId, userLabel }) {
     defaultSelectedDateForMonth(formatYearMonth(new Date()), new Date()),
   )
 
-  const today = useMemo(() => new Date(), [])
+  const today = useToday()
   const monthKey = useMemo(() => formatYearMonth(viewMonth), [viewMonth])
   const monthTitle = useMemo(() => formatMonthTitle(viewMonth), [viewMonth])
   const isViewingCurrentMonth = monthKey === formatYearMonth(today)

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useToday } from '@/hooks/useToday'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   CalendarDays,
@@ -29,12 +30,18 @@ import {
   dayYmdInMonth,
   defaultSelectedDateForMonth,
   formatDateYmd,
-  matchesCalendarYmd,
+  matchesReviewSlotYmd,
   monthDateBounds,
   resolveYmdForInstant,
   shiftDateYmd,
   sundayYmdsInMonth,
 } from '@/lib/dated-tasks'
+import {
+  getDailyColumnTheme,
+  getWeekdayInitial,
+  TASK_COLUMN_CELL_CLASS,
+  TASK_COLUMN_HEADER_CLASS,
+} from '@/lib/daily-grid-theme'
 import { reviewRequest } from '@/lib/review-api'
 import { tasksRequest } from '@/lib/tasks-api'
 import { cn } from '@/lib/utils'
@@ -177,7 +184,7 @@ export default function HabitTracker() {
   const todayColumnRef = useRef(null)
   const weeklyColumnRef = useRef(null)
 
-  const today = useMemo(() => new Date(), [])
+  const today = useToday()
   const monthKey = useMemo(() => formatYearMonth(viewMonth), [viewMonth])
   const monthTitle = useMemo(() => formatMonthTitle(viewMonth), [viewMonth])
   const currentMonthTitle = useMemo(() => formatMonthTitle(today), [today])
@@ -337,7 +344,7 @@ export default function HabitTracker() {
     for (let day = 1; day <= daysInMonth; day++) {
       const ymd = dayYmdInMonth(monthKey, day)
       const entry = review.DailyTasks.find((e) =>
-        matchesCalendarYmd(new Date(e.todayDate), ymd),
+        matchesReviewSlotYmd(new Date(e.todayDate), ymd),
       )
       if (entry) slotByDay.set(day, entry)
     }
@@ -372,7 +379,7 @@ export default function HabitTracker() {
       : null
     const todaySlot = isViewingCurrentMonth
       ? review.DailyTasks.find((e) =>
-          matchesCalendarYmd(new Date(e.todayDate), todayYmd),
+          matchesReviewSlotYmd(new Date(e.todayDate), todayYmd),
         ) ?? null
       : null
     const todayTasks = (todaySlot?.Task ?? []).filter((t) => {
@@ -504,7 +511,7 @@ export default function HabitTracker() {
     }
     if (activeTab === 'dated' && review) {
       const slot = review.DailyTasks?.find((entry) =>
-        matchesCalendarYmd(new Date(entry.todayDate), selectedHabitDate),
+        matchesReviewSlotYmd(new Date(entry.todayDate), selectedHabitDate),
       )
       const datedIdsForDay = new Set(
         [...datedSubTaskMap.entries()]
@@ -548,7 +555,7 @@ export default function HabitTracker() {
   const datedHabitTaskCount = useMemo(() => {
     if (!review) return 0
     const slot = review.DailyTasks?.find((entry) =>
-      matchesCalendarYmd(new Date(entry.todayDate), selectedHabitDate),
+      matchesReviewSlotYmd(new Date(entry.todayDate), selectedHabitDate),
     )
     const datedIdsForDay = new Set(
       [...datedSubTaskMap.entries()]
@@ -818,6 +825,25 @@ export default function HabitTracker() {
                   <p className="shrink-0 text-center text-xs text-slate-600 dark:text-slate-400">
                     {monthNavHint}
                   </p>
+                  {activeTab === 'daily' && !loading && hasPlan && review ? (
+                    <p className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center text-[10px] text-slate-500 dark:text-slate-400">
+                      <span className="inline-flex items-center gap-1">
+                        <span
+                          className="inline-block h-2.5 w-2.5 rounded-sm bg-red-200 dark:bg-red-900/60"
+                          aria-hidden
+                        />
+                        Weekend
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <span className="inline-flex gap-0.5" aria-hidden>
+                          <span className="inline-block h-2.5 w-2.5 rounded-sm bg-sky-200 dark:bg-sky-900/60" />
+                          <span className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-200 dark:bg-emerald-900/60" />
+                          <span className="inline-block h-2.5 w-2.5 rounded-sm bg-orange-200 dark:bg-orange-900/60" />
+                        </span>
+                        Weekdays (unique per week)
+                      </span>
+                    </p>
+                  ) : null}
 
               {!hasPlan ? (
                 <div className="flex flex-col items-center gap-3 py-12 text-center">
@@ -957,28 +983,35 @@ export default function HabitTracker() {
                       No daily habits yet
                     </p>
                   ) : (
-                    <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-rose-200/80 bg-white/80 dark:bg-slate-900/50">
+                    <div className="min-h-0 flex-1 overflow-auto rounded-lg bg-white/80 dark:bg-slate-900/50">
                       <table className="w-max min-w-full border-collapse text-[11px]">
                         <thead>
-                          <tr className="border-b border-rose-200/60 bg-rose-50/90 dark:bg-rose-950/40">
-                            <th className="sticky left-0 z-20 min-w-[7.5rem] border-r border-rose-200/60 bg-rose-50/95 px-2 py-1.5 text-left font-semibold text-slate-800 dark:bg-rose-950/90 dark:text-slate-100">
+                          <tr>
+                            <th
+                              className={cn(
+                                'sticky left-0 z-20 min-w-[7.5rem] px-2 py-1.5 text-left font-semibold',
+                                TASK_COLUMN_HEADER_CLASS,
+                              )}
+                            >
                               Task
                             </th>
                             {dailyGrid.days.map((day) => {
                               const isToday =
                                 dailyGrid.isViewingCurrentMonth && day === dailyGrid.todayDay
+                              const theme = getDailyColumnTheme(day, monthKey)
                               return (
                                 <th
                                   key={day}
                                   ref={isToday ? todayColumnRef : undefined}
                                   className={cn(
-                                    'min-w-[1.75rem] px-0.5 py-1.5 text-center font-semibold',
-                                    isToday
-                                      ? 'bg-rose-200 text-rose-900 ring-1 ring-inset ring-rose-400 dark:bg-rose-800 dark:text-rose-50'
-                                      : 'text-slate-600 dark:text-slate-400',
+                                    'min-w-[1.75rem] px-0.5 py-1 text-center font-semibold leading-tight',
+                                    theme.headerClass,
                                   )}
                                 >
-                                  {day}
+                                  <span className="block text-[11px]">{day}</span>
+                                  <span className="block text-[8px] font-medium uppercase opacity-70">
+                                    {getWeekdayInitial(day, monthKey)}
+                                  </span>
                                 </th>
                               )
                             })}
@@ -986,11 +1019,13 @@ export default function HabitTracker() {
                         </thead>
                         <tbody>
                           {dailyGrid.tasks.map((task) => (
-                            <tr
-                              key={task.id}
-                              className="border-b border-rose-100/80 last:border-0 dark:border-rose-900/50"
-                            >
-                              <td className="sticky left-0 z-10 max-w-[9rem] truncate border-r border-rose-100/80 bg-white/95 px-2 py-1.5 text-left font-medium text-slate-800 dark:bg-slate-900/90 dark:text-slate-100">
+                            <tr key={task.id}>
+                              <td
+                                className={cn(
+                                  'sticky left-0 z-10 max-w-[9rem] truncate px-2 py-1.5 text-left font-medium',
+                                  TASK_COLUMN_CELL_CLASS,
+                                )}
+                              >
                                 {task.name}
                               </td>
                               {dailyGrid.days.map((day) => {
@@ -998,13 +1033,14 @@ export default function HabitTracker() {
                                 const isToday =
                                   dailyGrid.isViewingCurrentMonth && day === dailyGrid.todayDay
                                 const canEdit = isToday && cell?.date
+                                const theme = getDailyColumnTheme(day, monthKey)
 
                                 return (
                                   <td
                                     key={day}
                                     className={cn(
                                       'p-0.5 text-center align-middle',
-                                      isToday && 'bg-rose-50/70 dark:bg-rose-950/30',
+                                      theme.cellClass,
                                     )}
                                   >
                                     {!cell ? (

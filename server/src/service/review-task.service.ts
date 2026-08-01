@@ -9,6 +9,10 @@ import {
   resolvePatchDateYmd,
 } from "../helper/dated-tasks.helper";
 import {
+  getTodayYmdInTimezone,
+  referenceDateFromYmd,
+} from "../helper/user-timezone.helper";
+import {
   findReviewSlotByYmd,
   indexReviewSlotByYmd,
 } from "../helper/review-date.helper";
@@ -167,9 +171,12 @@ const PatchReviewTaskCompletionService = async (
   id: string,
   userId: string,
   payload: PatchReviewPayload,
+  userTimezone = "UTC",
 ): Promise<unknown> => {
   const { type, date, dateYmd, subTaskId, isCompleted } = payload;
   const targetYmd = resolvePatchDateYmd({ dateYmd, date });
+  const todayYmd = getTodayYmdInTimezone(userTimezone);
+  const referenceDate = referenceDateFromYmd(todayYmd);
 
   const review = await ReviewTask.findOne({ _id: id, userId });
   if (!review) {
@@ -193,7 +200,7 @@ const PatchReviewTaskCompletionService = async (
       }
       if (
         !monthYear ||
-        !isAllowedDatedTaskDate(scheduledDatedDate, monthYear)
+        !isAllowedDatedTaskDate(scheduledDatedDate, monthYear, referenceDate, todayYmd)
       ) {
         throw new Error("Cannot update completion for this date");
       }

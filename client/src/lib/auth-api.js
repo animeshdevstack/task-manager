@@ -114,6 +114,14 @@ function runRefresh() {
  * @param {string} url
  * @param {RequestInit} [options]
  */
+function getUserTimezoneHeader() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  } catch {
+    return 'UTC'
+  }
+}
+
 export async function authenticatedFetch(url, options = {}) {
   const buildInit = () => {
     const token = localStorage.getItem('accessToken')
@@ -125,6 +133,7 @@ export async function authenticatedFetch(url, options = {}) {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
+        'X-User-Timezone': getUserTimezoneHeader(),
         ...options.headers,
       },
     }

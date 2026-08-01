@@ -29,6 +29,23 @@ export function matchesCalendarYmd(d, ymd) {
   return t >= startMs && t < endMs
 }
 
+export function isUtcNoonCalendarSlot(d) {
+  return (
+    d.getUTCHours() === 12 &&
+    d.getUTCMinutes() === 0 &&
+    d.getUTCSeconds() === 0 &&
+    d.getUTCMilliseconds() === 0
+  )
+}
+
+/** UTC-noon slots match one day exactly; legacy slots use wide matching. */
+export function matchesReviewSlotYmd(d, ymd) {
+  if (isUtcNoonCalendarSlot(d)) {
+    return formatDateYmdUtc(d) === ymd
+  }
+  return matchesCalendarYmd(d, ymd)
+}
+
 export function ymdFromParts(year, monthIndex, day) {
   const m = String(monthIndex + 1).padStart(2, '0')
   const d = String(day).padStart(2, '0')
