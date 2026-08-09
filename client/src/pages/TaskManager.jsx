@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { clearSession, getStoredUser } from '@/lib/auth-api'
-import { getHabitRowTheme } from '@/lib/daily-grid-theme'
+import { getTaskManagerRowTheme } from '@/lib/daily-grid-theme'
 import { tasksRequest } from '@/lib/tasks-api'
 import { cn } from '@/lib/utils'
 
@@ -979,7 +979,7 @@ export default function TaskManager() {
               pageTasks.map((task, i) => {
                 const index = start + i
                 const isEditing = editing?.section === s.key && editing?.index === index
-                const rowTheme = getHabitRowTheme(index)
+                const rowTheme = getTaskManagerRowTheme(index)
 
                 return (
                   <li

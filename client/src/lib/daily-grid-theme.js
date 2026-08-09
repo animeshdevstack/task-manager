@@ -92,9 +92,40 @@ export function getWeeklySundayColumnTheme(colIdx) {
   return WEEKDAY_PALETTE[colIdx % WEEKDAY_PALETTE.length]
 }
 
-/** Distinct tint per task row (cycles through the daily palette). */
+const TASK_ROW_ALTERNATE = [
+  {
+    headerClass:
+      'bg-slate-200 text-slate-800 dark:bg-slate-800/60 dark:text-slate-100',
+    cellClass: 'bg-slate-100/80 dark:bg-slate-900/40',
+  },
+  {
+    headerClass:
+      'bg-violet-200 text-violet-900 dark:bg-violet-950/50 dark:text-violet-100',
+    cellClass: 'bg-violet-100/80 dark:bg-violet-950/25',
+  },
+]
+
+/** Task Manager (/tasks) — custom light pink + slate alternating stripes. */
+const TASK_MANAGER_ROW_ALTERNATE = [
+  {
+    headerClass:
+      'bg-[#FEA8CD]/25 text-slate-800 dark:bg-[#FEA8CD]/10 dark:text-rose-50',
+    cellClass: 'bg-[#FEA8CD]/18 dark:bg-[#FEA8CD]/8',
+  },
+  {
+    headerClass:
+      'bg-slate-100 text-slate-800 dark:bg-slate-800/40 dark:text-slate-100',
+    cellClass: 'bg-slate-50/90 dark:bg-slate-900/30',
+  },
+]
+
+/** Alternating row tint for task lists and habit task columns. */
 export function getHabitRowTheme(rowIdx) {
-  return WEEKDAY_PALETTE[rowIdx % WEEKDAY_PALETTE.length]
+  return TASK_ROW_ALTERNATE[rowIdx % 2]
+}
+
+export function getTaskManagerRowTheme(rowIdx) {
+  return TASK_MANAGER_ROW_ALTERNATE[rowIdx % 2]
 }
 
 function getWeekBandIndex(day) {
