@@ -4,77 +4,89 @@ import { createToken, verifyToken } from "../helper/jwt.helper";
 import ForgetPasswordEmail from "../email/forget-password.email";
 import VerifyEmail from "../email/verify.email";
 
-const SignupService = async(data: any): Promise<any> => {
+const sessionUser = (user: {
+  _id: { toString(): string };
+  email: string;
+  role: string;
+}) => ({
+  id: user._id.toString(),
+  email: user.email,
+  role: user.role,
+});
+
+const issueTokens = (user: {
+  _id: { toString(): string };
+  email: string;
+  role: string;
+}) => {
+  const accessToken = createToken(
+    {
+      id: user._id.toString(),
+      email: user.email,
+      role: user.role,
+    },
+    "1h",
+  );
+  const refreshToken = createToken(
+    {
+      id: user._id.toString(),
+      email: user.email,
+      role: user.role,
+    },
+    "90d",
+  );
+  return { accessToken, refreshToken, user: sessionUser(user) };
+};
+
+const SignupService = async (data: any): Promise<any> => {
   try {
     const checkUser: any = await User.findOne({ email: data.email });
     if (checkUser) {
       throw new Error("User already exists");
     }
     const passwordHash = await bcrypt.hash(data.password, 10);
-    // const user: any = await User.create({ ...data, passwordHash });
-    const user: any = new User({ ...data, password: passwordHash });
+    // Never accept client-supplied role — public signup is always "user".
+    const user: any = new User({
+      Fname: data.Fname,
+      Lname: data.Lname,
+      email: data.email,
+      phone: data.phone,
+      password: passwordHash,
+      role: "user",
+      isActive: true,
+    });
     await user.save();
-    const raw = createToken({
-      email: user.email.toLowerCase(),
-    }, '1h');
+    const raw = createToken(
+      {
+        email: user.email.toLowerCase(),
+      },
+      "1h",
+    );
     await VerifyEmail(user.email, raw);
     console.info(`Email verification email sent to ${user.email}`);
-    const accessToken = createToken({
-      id: user._id.toString(),
-      email: user.email,
-      role: user.role,
-    }, '1h');
-    const refreshToken = createToken({
-      id: user._id.toString(),
-      email: user.email,
-      role: user.role,
-    }, '90d');
-    return {
-      accessToken,
-      refreshToken,
-      user: {
-        id: user._id.toString(),
-        email: user.email,
-        role: user.role,
-      },
-    };
+    return issueTokens(user);
   } catch (error) {
     if (error instanceof Error) {
       throw new Error(error.message);
     }
     throw new Error("Internal server error");
   }
-}
+};
 
-const SigninService = async(data: any): Promise<any> => {
+const SigninService = async (data: any): Promise<any> => {
   try {
     const user = await User.findOne({ email: data.email });
     if (!user) {
       throw new Error("User not found");
     }
+    if (user.isActive === false) {
+      throw new Error("Account is deactivated");
+    }
     const isPasswordValid = await bcrypt.compare(data.password, user.password);
     if (!isPasswordValid) {
-        throw new Error("Invalid password");
-      }
-    const accessToken = createToken({
-      id: user._id.toString(),
-      email: user.email,
-      role: user.role,
-    }, "1h");
-    const refreshToken = createToken({
-      id: user._id.toString(),
-      email: user.email,
-      role: user.role,
-    }, "90d");
-    return {
-      accessToken,
-      refreshToken,
-      user: {
-        id: user._id.toString(),
-        email: user.email,
-        role: user.role,
-      },
-    };
+      throw new Error("Invalid password");
+    }
+    return issueTokens(user);
   } catch (error) {
     console.log(error);
     if (error instanceof Error) {
@@ -82,9 +94,9 @@ const SigninService = async(data: any): Promise<any> => {
     }
     throw new Error("Internal server error");
   }
-}
+};
 
-const RefreshTokenService = async(refreshToken: string): Promise<any> => {
+const RefreshTokenService = async (refreshToken: string): Promise<any> => {
   try {
     const decoded = verifyToken(refreshToken);
     if (!decoded) {
@@ -94,18 +106,20 @@ const RefreshTokenService = async(refreshToken: string): Promise<any> => {
     if (!user) {
       throw new Error("User not found");
     }
-    const accessToken = createToken({
-      id: user._id.toString(),
-      email: user.email,
-      role: user.role,
-    }, "1h");
-    return {
-      accessToken,
-      user: {
+    if (user.isActive === false) {
+      throw new Error("Account is deactivated");
+    }
+    const accessToken = createToken(
+      {
         id: user._id.toString(),
         email: user.email,
         role: user.role,
       },
+      "1h",
+    );
+    return {
+      accessToken,
+      user: sessionUser(user),
     };
   } catch (error) {
     console.log(error);
@@ -114,30 +128,32 @@ const RefreshTokenService = async(refreshToken: string): Promise<any> => {
     }
     throw new Error("Internal server error");
   }
-}
+};
 
-const ForgotPasswordService = async(data: any): Promise<any> => {
+const ForgotPasswordService = async (data: any): Promise<any> => {
   try {
     const isUserExists: any = await User.findOne({ email: data.email });
     if (!isUserExists) {
       throw new Error("User not found");
     }
-    const raw = createToken({
-      email: isUserExists.email.toLowerCase(),
-    }, '15m');
+    const raw = createToken(
+      {
+        email: isUserExists.email.toLowerCase(),
+      },
+      "15m",
+    );
     await ForgetPasswordEmail(isUserExists.email, raw);
     console.info(`Password reset email sent to ${isUserExists.email}`);
     return raw;
-  }
-  catch (error) {
+  } catch (error) {
     if (error instanceof Error) {
       throw new Error(error.message);
     }
     throw new Error("Internal server error", { cause: error });
   }
-}
+};
 
-const ResetPasswordService = async(data: any): Promise<any> => {
+const ResetPasswordService = async (data: any): Promise<any> => {
   try {
     const decoded = verifyToken(data.token);
     if (!decoded) {
@@ -155,16 +171,15 @@ const ResetPasswordService = async(data: any): Promise<any> => {
       message: "Password reset successfully",
       data: user,
     };
-  }
-    catch (error) {
+  } catch (error) {
     if (error instanceof Error) {
       throw new Error(error.message);
     }
     throw new Error("Internal server error", { cause: error });
   }
-}
+};
 
-const VerifyEmailService = async(data: any): Promise<any> => {
+const VerifyEmailService = async (data: any): Promise<any> => {
   try {
     const decoded = verifyToken(data.token);
     if (!decoded) {
@@ -181,20 +196,19 @@ const VerifyEmailService = async(data: any): Promise<any> => {
       message: "Email verified successfully",
       data: user,
     };
-  }
-  catch (error) {
+  } catch (error) {
     if (error instanceof Error) {
       throw new Error(error.message);
     }
     throw new Error("Internal server error", { cause: error });
   }
-}
+};
 
-export { 
-    SignupService, 
-    SigninService, 
-    RefreshTokenService, 
-    ForgotPasswordService,
-    ResetPasswordService,
-    VerifyEmailService,
+export {
+  SignupService,
+  SigninService,
+  RefreshTokenService,
+  ForgotPasswordService,
+  ResetPasswordService,
+  VerifyEmailService,
 };

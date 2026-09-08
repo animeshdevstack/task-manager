@@ -3,9 +3,12 @@ import express, { Request, Response } from "express";
 import authRouter from "./routes/auth.route";
 import configuration from "./config/configuration";
 import Connection from "./libs/connection";
+import bootstrapAdmin from "./libs/admin-bootstrap";
 import addTasksRouter from "./routes/add-tasks.route";
 import reviewTaskRouter from "./routes/review-task.route";
 import followRouter from "./routes/follow.route";
+import adminRouter from "./routes/admin.route";
+import supportRouter from "./routes/support.route";
 const app = express();
 
 const PORT = configuration.PORT;
@@ -46,9 +49,12 @@ app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/add-tasks", addTasksRouter);
 app.use("/api/v1/review-tasks", reviewTaskRouter);
 app.use("/api/v1/follow", followRouter);
+app.use("/api/v1/admin", adminRouter);
+app.use("/api/v1/support", supportRouter);
 
 async function start() {
   await Connection();
+  await bootstrapAdmin();
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
   });

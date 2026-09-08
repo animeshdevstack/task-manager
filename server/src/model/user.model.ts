@@ -23,6 +23,7 @@ const userSchema = new Schema({
         required: false,
         unique: true,
         trim: true,
+        sparse: true,
     },
     password: {
         type: String,
@@ -32,8 +33,13 @@ const userSchema = new Schema({
     role: {
         type: String,
         required: true,
-        enum: ["admin", "user"],
+        enum: ["admin", "support", "user"],
         default: "user",
+    },
+    isActive: {
+        type: Boolean,
+        required: true,
+        default: true,
     },
     emailVerified: {
         type: Boolean,

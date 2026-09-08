@@ -167,13 +167,20 @@ type PatchReviewPayload = {
   isCompleted: boolean;
 };
 
+type PatchReviewOptions = {
+  /** When true, allow any date within the review month (Support / Admin). */
+  relaxDateRules?: boolean;
+};
+
 const PatchReviewTaskCompletionService = async (
   id: string,
   userId: string,
   payload: PatchReviewPayload,
   userTimezone = "UTC",
+  options: PatchReviewOptions = {},
 ): Promise<unknown> => {
   const { type, date, dateYmd, subTaskId, isCompleted } = payload;
+  const relaxDateRules = options.relaxDateRules === true;
   const targetYmd = resolvePatchDateYmd({ dateYmd, date });
   const todayYmd = getTodayYmdInTimezone(userTimezone);
   const referenceDate = referenceDateFromYmd(todayYmd);
@@ -183,12 +190,19 @@ const PatchReviewTaskCompletionService = async (
     throw new Error("Review task not found");
   }
 
+  const monthYear =
+    review.currentMonthAndYear ?? "";
+
+  if (monthYear && !targetYmd.startsWith(`${monthYear}-`)) {
+    throw new Error(`Date must fall within month ${monthYear}`);
+  }
+
   const addTask = await AddTask.findOne({ _id: review.TaskId, userId });
   const datedSubTaskDates = buildDatedSubTaskIdMap(
     addTask?.DatedTasks as { date: string; tasks?: { _id?: Types.ObjectId }[] }[] | undefined,
   );
-  const monthYear =
-    review.currentMonthAndYear ?? addTask?.currentMonthAndYear ?? "";
+  const resolvedMonthYear =
+    monthYear || addTask?.currentMonthAndYear || "";
 
   let updated = false;
 
@@ -198,11 +212,18 @@ const PatchReviewTaskCompletionService = async (
       if (targetYmd !== scheduledDatedDate) {
         throw new Error("Daily extras can only be updated on their scheduled date");
       }
-      if (
-        !monthYear ||
-        !isAllowedDatedTaskDate(scheduledDatedDate, monthYear, referenceDate, todayYmd)
+      if (!relaxDateRules) {
+        if (
+          !resolvedMonthYear ||
+          !isAllowedDatedTaskDate(scheduledDatedDate, resolvedMonthYear, referenceDate, todayYmd)
+        ) {
+          throw new Error("Cannot update completion for this date");
+        }
+      } else if (
+        resolvedMonthYear &&
+        !scheduledDatedDate.startsWith(`${resolvedMonthYear}-`)
       ) {
-        throw new Error("Cannot update completion for this date");
+        throw new Error(`Date must fall within month ${resolvedMonthYear}`);
       }
     }
 
@@ -214,7 +235,7 @@ const PatchReviewTaskCompletionService = async (
       review.DailyTasks,
       dailyByYmd,
       targetYmd,
-      monthYear,
+      resolvedMonthYear,
       (entry) => entry.todayDate,
     );
     const applyCompletionInSlot = (
@@ -249,7 +270,7 @@ const PatchReviewTaskCompletionService = async (
         review.DailyTasks,
         dailyByYmd,
         targetYmd,
-        monthYear,
+        resolvedMonthYear,
         (entry) => entry.todayDate,
       );
     if (!updated && scheduledDatedDate && addTask && slotForHeal) {
@@ -275,7 +296,7 @@ const PatchReviewTaskCompletionService = async (
       review.WeeklyTasks,
       weeklyByYmd,
       targetYmd,
-      monthYear,
+      resolvedMonthYear,
       (entry) => entry.sundayDate,
     );
     const applyWeeklyCompletion = (
@@ -301,7 +322,7 @@ const PatchReviewTaskCompletionService = async (
       }
     }
   } else if (type === "monthly") {
-    const monthEndYmd = monthYear ? getLastDateOfMonth(monthYear) : "";
+    const monthEndYmd = resolvedMonthYear ? getLastDateOfMonth(resolvedMonthYear) : "";
     const monthMatches =
       Boolean(monthEndYmd) &&
       (targetYmd === monthEndYmd ||
