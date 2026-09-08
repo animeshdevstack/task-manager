@@ -1,5 +1,19 @@
 import { Schema, model } from "mongoose";
 
+const actionLogTaskSchema = new Schema(
+  {
+    subTaskId: {
+      type: Schema.Types.ObjectId,
+      required: true,
+    },
+    isCompleted: {
+      type: Boolean,
+      required: true,
+    },
+  },
+  { _id: false },
+);
+
 const supportActionLogSchema = new Schema(
   {
     actorId: {
@@ -34,13 +48,23 @@ const supportActionLogSchema = new Schema(
       required: true,
       trim: true,
     },
+    tasks: {
+      type: [actionLogTaskSchema],
+      required: true,
+      validate: {
+        validator: (v: unknown[]) => Array.isArray(v) && v.length > 0,
+        message: "At least one task is required",
+      },
+    },
+    /** @deprecated legacy single-task fields — kept for old documents */
     subTaskId: {
       type: Schema.Types.ObjectId,
-      required: true,
+      required: false,
     },
+    /** @deprecated legacy single-task fields — kept for old documents */
     isCompleted: {
       type: Boolean,
-      required: true,
+      required: false,
     },
     ticketId: {
       type: Schema.Types.ObjectId,

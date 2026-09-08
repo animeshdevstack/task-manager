@@ -268,11 +268,15 @@ const logSupportAction = async (entry: {
   reviewTaskId: string;
   type: "daily" | "weekly" | "monthly";
   dateYmd: string;
-  subTaskId: string;
-  isCompleted: boolean;
+  tasks: { subTaskId: string; isCompleted: boolean }[];
   ticketId?: string;
   note?: string;
 }) => {
+  if (!Array.isArray(entry.tasks) || entry.tasks.length === 0) {
+    throw new Error("At least one task is required for action log");
+  }
+
+  const first = entry.tasks[0]!;
   await SupportActionLog.create({
     actorId: entry.actorId,
     actorRole: entry.actorRole,
@@ -280,8 +284,10 @@ const logSupportAction = async (entry: {
     reviewTaskId: entry.reviewTaskId,
     type: entry.type,
     dateYmd: entry.dateYmd,
-    subTaskId: entry.subTaskId,
-    isCompleted: entry.isCompleted,
+    tasks: entry.tasks,
+    // Legacy single-task mirrors for older readers
+    subTaskId: first.subTaskId,
+    isCompleted: first.isCompleted,
     ticketId: entry.ticketId,
     note: entry.note,
   });
@@ -300,6 +306,7 @@ const PatchTargetUserReviewService = async (params: {
   note?: string;
   ticketId?: string;
   userTimezone?: string;
+  skipLog?: boolean;
 }) => {
   await assertTargetUser(params.targetUserId);
 
@@ -317,22 +324,28 @@ const PatchTargetUserReviewService = async (params: {
     { relaxDateRules: true },
   );
 
-  const dateYmd =
-    params.dateYmd?.trim() ||
-    (typeof params.date === "string" ? params.date.slice(0, 10) : "");
+  if (!params.skipLog) {
+    const dateYmd =
+      params.dateYmd?.trim() ||
+      (typeof params.date === "string" ? params.date.slice(0, 10) : "");
 
-  await logSupportAction({
-    actorId: params.actorId,
-    actorRole: params.actorRole,
-    targetUserId: params.targetUserId,
-    reviewTaskId: params.reviewId,
-    type: params.type,
-    dateYmd,
-    subTaskId: params.subTaskId,
-    isCompleted: params.isCompleted,
-    ticketId: params.ticketId,
-    note: params.note,
-  });
+    await logSupportAction({
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      targetUserId: params.targetUserId,
+      reviewTaskId: params.reviewId,
+      type: params.type,
+      dateYmd,
+      tasks: [
+        {
+          subTaskId: params.subTaskId,
+          isCompleted: params.isCompleted,
+        },
+      ],
+      ticketId: params.ticketId,
+      note: params.note,
+    });
+  }
 
   return review;
 };
@@ -578,8 +591,23 @@ const ResolveTicketService = async (params: {
         note: params.resolutionNote,
         ticketId: ticket._id.toString(),
         userTimezone: params.userTimezone,
+        skipLog: true,
       });
     }
+    await logSupportAction({
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      targetUserId: ticket.userId.toString(),
+      reviewTaskId: ticket.reviewTaskId.toString(),
+      type: ticket.type as "daily" | "weekly" | "monthly",
+      dateYmd: ticket.dateYmd,
+      tasks: tasks.map((task) => ({
+        subTaskId: task.subTaskId,
+        isCompleted: true,
+      })),
+      ticketId: ticket._id.toString(),
+      note: params.resolutionNote,
+    });
   }
 
   ticket.status = params.status;
