@@ -337,10 +337,13 @@ const PatchTargetUserReviewService = async (params: {
   return review;
 };
 
+/** Mongoose optional ObjectIds are typed as `T | null | undefined`. */
+type IdLike = { toString(): string } | null | undefined;
+
 const normalizeTicketTasks = (t: {
-  tasks?: { subTaskId?: { toString(): string }; subTaskName?: string }[];
-  subTaskId?: { toString(): string };
-  subTaskName?: string;
+  tasks?: { subTaskId?: IdLike; subTaskName?: string | null }[];
+  subTaskId?: IdLike;
+  subTaskName?: string | null;
 }): { subTaskId: string; subTaskName: string }[] => {
   if (Array.isArray(t.tasks) && t.tasks.length > 0) {
     return t.tasks.map((item) => ({
@@ -448,17 +451,17 @@ const ListMyTicketsService = async (userId: string) => {
 const mapStaffTicket = (t: {
   _id: mongoose.Types.ObjectId;
   userId: unknown;
-  reviewTaskId?: { toString(): string };
+  reviewTaskId?: IdLike;
   type: string;
   dateYmd: string;
-  tasks?: { subTaskId?: { toString(): string }; subTaskName?: string }[];
-  subTaskId?: { toString(): string };
-  subTaskName?: string;
+  tasks?: { subTaskId?: IdLike; subTaskName?: string | null }[];
+  subTaskId?: IdLike;
+  subTaskName?: string | null;
   message: string;
   status: string;
-  resolvedBy?: { toString(): string };
-  resolvedAt?: Date;
-  resolutionNote?: string;
+  resolvedBy?: IdLike;
+  resolvedAt?: Date | null;
+  resolutionNote?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
 }) => {
