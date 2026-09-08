@@ -3,6 +3,7 @@ import { useToday } from '@/hooks/useToday'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   CalendarDays,
+  LifeBuoy,
   ListChecks,
 } from 'lucide-react'
 import AppPageHeader from '@/components/layout/AppPageHeader'
@@ -244,9 +245,12 @@ export default function HabitTracker() {
   const loadReview = useCallback(async () => {
     setLoading(true)
     try {
-      const planRes = await tasksRequest(
-        `/get-tasks?month=${encodeURIComponent(monthKey)}`,
-      )
+      const [planRes, reviewRes] = await Promise.all([
+        tasksRequest(`/get-tasks?month=${encodeURIComponent(monthKey)}`),
+        reviewRequest(
+          `/get-user-review-task?month=${encodeURIComponent(monthKey)}`,
+        ),
+      ])
       const plan = planRes.data?.task ?? planRes.data?.tasks?.[0] ?? null
 
       if (!plan?._id) {
@@ -259,22 +263,9 @@ export default function HabitTracker() {
       setHasPlan(true)
       setPlan(plan)
 
-      const reviewRes = await reviewRequest(
-        `/get-user-review-task?month=${encodeURIComponent(monthKey)}`,
-      )
-      const summary = reviewRes.data?.task ?? reviewRes.data?.tasks?.[0] ?? null
-
-      if (!summary?._id) {
-        setReview(null)
-        return
-      }
-
-      const detailRes = await reviewRequest(
-        `/get-user-review-task-by-id/${summary._id}`,
-      )
-      const doc = detailRes.data
-      setReview(doc)
-
+      const reviewDoc =
+        reviewRes.data?.task ?? reviewRes.data?.tasks?.[0] ?? null
+      setReview(reviewDoc?._id ? reviewDoc : null)
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Could not load habits', 'error')
       setReview(null)
@@ -283,7 +274,7 @@ export default function HabitTracker() {
     } finally {
       setLoading(false)
     }
-  }, [monthKey, today])
+  }, [monthKey])
 
   useEffect(() => {
     void loadReview()
@@ -717,6 +708,15 @@ export default function HabitTracker() {
         navContext="habits"
         maxWidthClass="max-w-6xl"
       />
+
+      <div className="mx-auto flex w-full max-w-6xl shrink-0 justify-end px-4 pt-2">
+        <Button variant="outline" size="sm" asChild className="h-8 gap-1">
+          <Link to="/support-request">
+            <LifeBuoy className="h-4 w-4" />
+            Contact support
+          </Link>
+        </Button>
+      </div>
 
       <main className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden px-4 py-2">
         {toast ? <Toast message={toast.message} variant={toast.variant} /> : null}

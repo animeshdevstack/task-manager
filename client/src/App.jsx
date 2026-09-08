@@ -12,6 +12,24 @@ import Following from '@/pages/Following'
 import Pending from '@/pages/Pending'
 import Requests from '@/pages/Requests'
 import UserProfile from '@/pages/UserProfile'
+import AdminDashboard from '@/pages/admin/AdminDashboard'
+import AdminUserHabits from '@/pages/admin/AdminUserHabits'
+import SupportDashboard from '@/pages/support/SupportDashboard'
+import SupportUserHabits from '@/pages/support/SupportUserHabits'
+import SupportRequest from '@/pages/SupportRequest'
+import { getStoredUser, hasActiveSession } from '@/lib/auth-api'
+import { homePathForRole } from '@/lib/roles'
+
+function RoleHomeRedirect() {
+  if (!hasActiveSession()) {
+    return <Navigate to="/login" replace />
+  }
+  const role = getStoredUser()?.role
+  if (role === 'admin' || role === 'support') {
+    return <Navigate to={homePathForRole(role)} replace />
+  }
+  return <Home />
+}
 
 export default function App() {
   return (
@@ -21,7 +39,7 @@ export default function App() {
           path="/"
           element={
             <ProtectedRoute>
-              <Home />
+              <RoleHomeRedirect />
             </ProtectedRoute>
           }
         />
@@ -30,9 +48,49 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route
+          path="/admin"
+          element={
+            <ProtectedRoute roles={['admin']}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/users/:userId/habits"
+          element={
+            <ProtectedRoute roles={['admin']}>
+              <AdminUserHabits />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/support"
+          element={
+            <ProtectedRoute roles={['support', 'admin']}>
+              <SupportDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/support/users/:userId"
+          element={
+            <ProtectedRoute roles={['support', 'admin']}>
+              <SupportUserHabits />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/support-request"
+          element={
+            <ProtectedRoute roles={['user']}>
+              <SupportRequest />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/tasks"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute roles={['user']}>
               <TaskManager />
             </ProtectedRoute>
           }
@@ -40,7 +98,7 @@ export default function App() {
         <Route
           path="/habits"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute roles={['user']}>
               <HabitTracker />
             </ProtectedRoute>
           }
@@ -48,7 +106,7 @@ export default function App() {
         <Route
           path="/requests"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute roles={['user']}>
               <Requests />
             </ProtectedRoute>
           }
@@ -56,7 +114,7 @@ export default function App() {
         <Route
           path="/pending"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute roles={['user']}>
               <Pending />
             </ProtectedRoute>
           }
@@ -64,7 +122,7 @@ export default function App() {
         <Route
           path="/followers"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute roles={['user']}>
               <Followers />
             </ProtectedRoute>
           }
@@ -72,7 +130,7 @@ export default function App() {
         <Route
           path="/following"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute roles={['user']}>
               <Following />
             </ProtectedRoute>
           }
@@ -80,7 +138,7 @@ export default function App() {
         <Route
           path="/profile/:userId"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute roles={['user']}>
               <UserProfile />
             </ProtectedRoute>
           }

@@ -44,6 +44,12 @@ const configuration = {
 
         process.env.SMTP_SECURE === undefined || process.env.SMTP_SECURE === "true",
 
+    /** Bootstrap first admin (seeded once if no admin exists) */
+    ADMIN_EMAIL: process.env.ADMIN_EMAIL ?? "",
+    ADMIN_PASSWORD: process.env.ADMIN_PASSWORD ?? "",
+    ADMIN_FNAME: process.env.ADMIN_FNAME ?? "Admin",
+    ADMIN_LNAME: process.env.ADMIN_LNAME ?? "User",
+
 }
 
 

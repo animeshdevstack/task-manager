@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/ui/password-input'
 import { PLANNER_HIGHLIGHTS } from '@/constants/planner-highlights'
 import { authRequest, saveSession } from '@/lib/auth-api'
+import { homePathForRole } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 
 export default function Login() {
@@ -37,7 +38,7 @@ export default function Login() {
         body: JSON.stringify({ email, password }),
       })
       saveSession(res.data)
-      navigate('/', { replace: true })
+      navigate(homePathForRole(res.data?.user?.role), { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign in failed')
     } finally {

@@ -53,4 +53,18 @@ const authMiddleware: RequestHandler = (req, res, next) => {
   }
 };
 
-export { authMiddleware };
+const requireRoles = (...roles: string[]): RequestHandler => {
+  return (req, res, next) => {
+    const role = req.auth?.role;
+    if (!role || !roles.includes(role)) {
+      res.status(403).json({
+        success: false,
+        message: "Forbidden: insufficient permissions",
+      });
+      return;
+    }
+    next();
+  };
+};
+
+export { authMiddleware, requireRoles };
